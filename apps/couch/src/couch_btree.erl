@@ -112,26 +112,19 @@ convert_fun_arity(Fun) when is_function(Fun, 2) ->
 convert_fun_arity(Fun) when is_function(Fun, 3) ->
     Fun.    % Already arity 3
 
-make_key_in_end_range_function(Bt, fwd, Options) ->
+make_key_in_end_range_function(Bt, Dir, Options) ->
     case couch_util:get_value(end_key_gt, Options) of
     undefined ->
         case couch_util:get_value(end_key, Options) of
         undefined ->
             fun(_Key) -> true end;
         LastKey ->
-            fun(Key) -> not less(Bt, LastKey, Key) end
-        end;
-    EndKey ->
-        fun(Key) -> less(Bt, Key, EndKey) end
-    end;
-make_key_in_end_range_function(Bt, rev, Options) ->
-    case couch_util:get_value(end_key_gt, Options) of
-    undefined ->
-        case couch_util:get_value(end_key, Options) of
-        undefined ->
-            fun(_Key) -> true end;
-        LastKey ->
-            fun(Key) -> not less(Bt, Key, LastKey) end
+            case Dir of
+            rev ->
+                fun(Key) -> not less(Bt, Key, LastKey) end;
+            fwd ->
+                fun(Key) -> not less(Bt, LastKey, Key) end
+            end
         end;
     EndKey ->
         fun(Key) -> less(Bt, EndKey, Key) end
