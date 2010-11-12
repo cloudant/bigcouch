@@ -127,7 +127,12 @@ make_key_in_end_range_function(Bt, Dir, Options) ->
             end
         end;
     EndKey ->
-        fun(Key) -> less(Bt, EndKey, Key) end
+        case Dir of
+        rev ->
+            fun(Key) -> less(Bt, EndKey, Key) end;
+        fwd ->
+            fun(Key) -> less(Bt, Key, EndKey) end
+        end            
     end.
 
 
