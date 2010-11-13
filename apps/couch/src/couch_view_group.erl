@@ -577,8 +577,13 @@ init_group(Fd, #group{def_lang=Lang,views=Views}=Group, IndexHeader) ->
             <<"raw">> ->
                 Less = fun(A,B) -> A < B end
             end,
+            
+            BTreeChunkSize = list_to_integer(couch_config:get("couchdb",
+         "btree_chunk_size", "1279")),
+            
             {ok, Btree} = couch_btree:open(BtreeState, Fd, [{less, Less},
-                {reduce, ReduceFun}]),
+                {reduce, ReduceFun},
+                {chunk_size, BTreeChunkSize}]),
             View#view{btree=Btree}
         end,
         ViewStates, Views),

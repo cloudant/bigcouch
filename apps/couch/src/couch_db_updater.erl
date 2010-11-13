@@ -407,16 +407,22 @@ init_db(DbName, Filepath, Fd, Header0) ->
     true -> ok = couch_file:sync(Filepath);
     _ -> ok
     end,
+    
+    BTreeChunkSize = list_to_integer(couch_config:get("couchdb",
+         "btree_chunk_size", "1279")),
 
     {ok, IdBtree} = couch_btree:open(Header#db_header.id_tree_state, Fd,
         [{split, fun ?MODULE:btree_by_id_split/1},
          {join, fun ?MODULE:btree_by_id_join/2},
-         {reduce, fun ?MODULE:btree_by_id_reduce/2}]),
+         {reduce, fun ?MODULE:btree_by_id_reduce/2},
+         {chunk_size, BTreeChunkSize}]),
     {ok, SeqBtree} = couch_btree:open(Header#db_header.seq_tree_state, Fd,
         [{split, fun ?MODULE:btree_by_seq_split/1},
          {join, fun ?MODULE:btree_by_seq_join/2},
-         {reduce, fun ?MODULE:btree_by_seq_reduce/2}]),
-    {ok, LocalDocsBtree} = couch_btree:open(Header#db_header.local_tree_state, Fd),
+         {reduce, fun ?MODULE:btree_by_seq_reduce/2},
+         {chunk_size, BTreeChunkSize}]),
+    {ok, LocalDocsBtree} = couch_btree:open(Header#db_header.local_tree_state, Fd,
+                                           [{chunk_size, BTreeChunkSize}]),
     case Header#db_header.security_ptr of
     nil ->
         Security = [],

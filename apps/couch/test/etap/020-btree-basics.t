@@ -17,11 +17,10 @@
 filename() -> test_util:build_file("test/etap/temp.020").
 rows() -> 250.
 
--record(btree, {fd, root, extract_kv, assemble_kv, less, reduce}).
+-record(btree, {fd, root, chunk_size, extract_kv, assemble_kv, less, reduce}).
 
 main(_) ->
     test_util:init_code_path(),
-    couch_config:start_link([]),
     etap:plan(51),
     case (catch test()) of
         ok ->
