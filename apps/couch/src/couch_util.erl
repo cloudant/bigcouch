@@ -14,7 +14,7 @@
 
 -export([priv_dir/0, start_driver/1, normpath/1]).
 -export([should_flush/0, should_flush/1, to_existing_atom/1]).
--export([rand32/0, implode/2, collate/2, collate/3]).
+-export([rand32/0, nonce/0, implode/2, collate/2, collate/3]).
 -export([abs_pathname/1,abs_pathname/2, trim/1, ascii_lower/1]).
 -export([encodeBase64Url/1, decodeBase64Url/1]).
 -export([to_hex/1, parse_term/1, dict_find/3]).
@@ -166,6 +166,10 @@ json_user_ctx(#db{name=DbName, user_ctx=Ctx}) ->
 % returns a random integer
 rand32() ->
     crypto:rand_uniform(0, 16#100000000).
+
+% generate a random 5 digit string
+nonce() ->
+    lists:sublist(integer_to_list(couch_util:rand32()),1,5).
 
 % given a pathname "../foo/bar/" it gives back the fully qualified
 % absolute pathname.

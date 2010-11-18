@@ -15,7 +15,7 @@
 -export([handle_welcome_req/2,handle_favicon_req/2,handle_utils_dir_req/2,
     handle_all_dbs_req/1,handle_replicate_req/1,handle_restart_req/1,
     handle_uuids_req/1,handle_config_req/1,handle_log_req/1,
-    handle_task_status_req/1]).
+    handle_task_status_req/1, handle_rexi_calls_req/1]).
 
 -export([increment_update_seq_req/2]).
 
@@ -215,5 +215,26 @@ handle_log_req(#httpd{method='GET'}=Req) ->
     last_chunk(Resp);
 handle_log_req(Req) ->
     send_method_not_allowed(Req, "GET").
+
+% httpd rexi_calls
+
+handle_rexi_calls_req(#httpd{method='GET'}=Req) ->
+    ok = couch_httpd:verify_is_server_admin(Req),
+    NoCalls = list_to_integer(couch_httpd:qs_value(Req, "n", "20")),
+    {ok, Data} = rexi_server:calls(NoCalls),
+    {ok, Resp} = start_chunked_response(Req, 200, [
+        % send a plaintext response
+        {"Content-Type", "text/plain; charset=utf-8"},
+        {"Content-Length", integer_to_list(length(Data))}
+    ]),
+    send_chunk(Resp,Data),
+    last_chunk(Resp);
+handle_rexi_calls_req(#httpd{method='PUT'}=Req) ->
+    ok = couch_httpd:verify_is_server_admin(Req),
+    NewSize = list_to_integer(couch_httpd:qs_value(Req, "cache_size", "20")),
+    {ok, OldSize} = rexi_server:set_call_cache_size(NewSize),    
+    send_json(Req, 200, OldSize);
+handle_rexi_calls_req(Req) ->
+    send_method_not_allowed(Req, "GET,PUT").
 
 
