@@ -222,12 +222,17 @@ handle_rexi_calls_req(#httpd{method='GET'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
     NoCalls = list_to_integer(couch_httpd:qs_value(Req, "n", "20")),
     {ok, Data} = rexi_server:calls(NoCalls),
+    %% TODO: convert to JSON format  
+    Msgs = lists:map(fun(Elem) ->
+                         [Ts,From,Nonce,M,F,A] = Elem,
+                         io_lib:format("[~p] from: ~p nonce: ~p ~n ~p ~p ~p ~n",
+                        [calendar:now_to_datetime(Ts),From,Nonce,M,F,A])
+                     end,Data),
     {ok, Resp} = start_chunked_response(Req, 200, [
-        % send a plaintext response
         {"Content-Type", "text/plain; charset=utf-8"},
-        {"Content-Length", integer_to_list(length(Data))}
+        {"Content-Length", integer_to_list(length(Msgs))}
     ]),
-    send_chunk(Resp,Data),
+    send_chunk(Resp,Msgs),
     last_chunk(Resp);
 handle_rexi_calls_req(#httpd{method='PUT'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
