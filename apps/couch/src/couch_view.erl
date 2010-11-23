@@ -45,7 +45,7 @@ get_group_server(DbName, GroupId) ->
     % get signature for group
     case couch_view_group:open_db_group(DbName, GroupId) of
     % do we need to close this db?
-    {ok, _Db, Group} ->
+    {ok, Group} ->
         case gen_server:call(couch_view, {get_group_server, DbName, Group}) of
         {ok, Pid} ->
             Pid;

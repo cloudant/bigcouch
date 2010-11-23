@@ -305,7 +305,7 @@ handle_info({'EXIT', FromPid, reset}, #group_state{init_args=InitArgs,
 handle_info({'EXIT', _, reset}, State) ->
     %% message from an old (probably pre-compaction) updater; ignore
     {noreply, State};
-    
+
 handle_info({'EXIT', _FromPid, normal}, State) ->
     {noreply, State};
 
@@ -440,18 +440,17 @@ set_view_sig(#group{
     G#group{sig=couch_util:md5(term_to_binary({Views, Language, DesignOptions}))}.
 
 open_db_group(DbName, GroupId) ->
-    case couch_db:open_int(DbName, []) of
-    {ok, Db} ->
-        case couch_db:open_doc(Db, GroupId) of
-        {ok, Doc} ->
-            {ok, Db, design_doc_to_view_group(Doc)};
-        Else ->
-            couch_db:close(Db),
-            Else
-        end;
-    Else ->
-        Else
-    end.
+    FullDbName = mem3_util:extract_db_name(DbName),
+    {Pid, Ref} =
+        spawn_monitor(fun() ->
+                          exit(fabric:open_doc(FullDbName,
+                               GroupId, []))
+                      end),
+    {ok, Doc} =
+        receive {'DOWN',Ref,process,Pid, Resp} ->
+            Resp
+        end,
+    {ok, design_doc_to_view_group(Doc)}.
 
 get_group_info(State) ->
     #group_state{
@@ -570,17 +569,17 @@ init_group(Fd, #group{def_lang=Lang,views=Views}=Group, IndexHeader) ->
                         UserReds),
                     {Count, Reduced}
                 end,
-            
+
             case couch_util:get_value(<<"collation">>, Options, <<"default">>) of
             <<"default">> ->
                 Less = fun couch_view:less_json_ids/2;
             <<"raw">> ->
                 Less = fun(A,B) -> A < B end
             end,
-            
+
             BTreeChunkSize = list_to_integer(couch_config:get("couchdb",
          "btree_chunk_size", "1279")),
-            
+
             {ok, Btree} = couch_btree:open(BtreeState, Fd, [{less, Less},
                 {reduce, ReduceFun},
                 {chunk_size, BTreeChunkSize}]),
