@@ -15,7 +15,7 @@
 
 %% API
 -export([start_link/1, request_group/2, request_group_info/1]).
--export([open_db_group/2, open_temp_group/5, design_doc_to_view_group/1,design_root/2]).
+-export([open_db_group/2, design_doc_to_view_group/1,design_root/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -417,27 +417,6 @@ open_index_file(compact, RootDir, DbName, GroupSig) ->
     Error           -> Error
     end.
 
-open_temp_group(DbName, Language, DesignOptions, MapSrc, RedSrc) ->
-    case couch_db:open_int(DbName, []) of
-    {ok, Db} ->
-        View = #view{map_names=[<<"_temp">>],
-            id_num=0,
-            btree=nil,
-            def=MapSrc,
-            reduce_funs= if RedSrc==[] -> []; true -> [{<<"_temp">>, RedSrc}] end,
-            options=DesignOptions},
-
-        {ok, Db, set_view_sig(#group{name = <<"_temp">>, views=[View],
-            def_lang=Language, design_options=DesignOptions})};
-    Error ->
-        Error
-    end.
-
-set_view_sig(#group{
-            views=Views,
-            def_lang=Language,
-            design_options=DesignOptions}=G) ->
-    G#group{sig=couch_util:md5(term_to_binary({Views, Language, DesignOptions}))}.
 
 open_db_group(DbName, GroupId) ->
     FullDbName = mem3_util:extract_db_name(DbName),

@@ -13,7 +13,7 @@
 -module(couch_httpd_view).
 -include("couch_db.hrl").
 
--export([handle_view_req/3,handle_temp_view_req/2]).
+-export([handle_view_req/3]).
 
 -export([get_stale_type/1, get_reduce_type/1, parse_view_params/3]).
 -export([make_view_fold_fun/7, finish_view_fold/4, finish_view_fold/5, view_row_obj/3]).
@@ -77,36 +77,6 @@ handle_view_req(#httpd{method='POST',
 handle_view_req(Req, _Db, _DDoc) ->
     send_method_not_allowed(Req, "GET,POST,HEAD").
 
-handle_temp_view_req(#httpd{method='POST'}=Req, Db) ->
-    couch_httpd:validate_ctype(Req, "application/json"),
-    ok = couch_db:check_is_admin(Db),
-    couch_stats_collector:increment({httpd, temporary_view_reads}),
-    {Props} = couch_httpd:json_body_obj(Req),
-    Language = couch_util:get_value(<<"language">>, Props, <<"javascript">>),
-    {DesignOptions} = couch_util:get_value(<<"options">>, Props, {[]}),
-    MapSrc = couch_util:get_value(<<"map">>, Props),
-    Keys = couch_util:get_value(<<"keys">>, Props, nil),
-    Reduce = get_reduce_type(Req),
-    case couch_util:get_value(<<"reduce">>, Props, null) of
-    null ->
-        QueryArgs = parse_view_params(Req, Keys, map),
-        {ok, View, Group} = couch_view:get_temp_map_view(Db, Language,
-            DesignOptions, MapSrc),
-        output_map_view(Req, View, Group, Db, QueryArgs, Keys);
-    _ when Reduce =:= false ->
-        QueryArgs = parse_view_params(Req, Keys, red_map),
-        {ok, View, Group} = couch_view:get_temp_map_view(Db, Language,
-            DesignOptions, MapSrc),
-        output_map_view(Req, View, Group, Db, QueryArgs, Keys);
-    RedSrc ->
-        QueryArgs = parse_view_params(Req, Keys, reduce),
-        {ok, View, Group} = couch_view:get_temp_reduce_view(Db, Language,
-            DesignOptions, MapSrc, RedSrc),
-        output_reduce_view(Req, Db, View, Group, QueryArgs, Keys)
-    end;
-
-handle_temp_view_req(Req, _Db) ->
-    send_method_not_allowed(Req, "POST").
 
 output_map_view(Req, View, Group, Db, QueryArgs, nil) ->
     #view_query_args{
@@ -398,7 +368,7 @@ make_view_fold_fun(Req, QueryArgs, Etag, Db, UpdateSeq, TotalViewCount, HelperFu
     #view_query_args{
         include_docs = IncludeDocs
     } = QueryArgs,
-    
+
     fun({{Key, DocId}, Value}, OffsetReds,
             {AccLimit, AccSkip, Resp, RowFunAcc}) ->
         case {AccLimit, AccSkip, Resp} of

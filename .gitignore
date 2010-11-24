@@ -6,6 +6,7 @@ erl_crash.dump
 
 # building
 apps/*/ebin/
+deps
 rel/dbcore
 rel/bigcouch.config
 rel/overlay.config
@@ -23,7 +24,11 @@ couchjs/config.log
 @abs_top_builddir@/
 apps/couch/test/temp*
 apps/couch/test/etap/
+!apps/couch/test/etap/*.t
 
 # dev
 rel/dev*
 rel/tmpdata
+
+# OS X
+.DS_Store

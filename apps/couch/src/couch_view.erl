@@ -14,11 +14,11 @@
 -behaviour(gen_server).
 
 -export([start_link/0,fold/4,less_json/2,less_json_ids/2,expand_dups/2,
-    detuple_kvs/2,init/1,terminate/2,handle_call/3,handle_cast/2,handle_info/2,
-    code_change/3,get_reduce_view/4,get_temp_reduce_view/5,get_temp_map_view/4,
-    get_map_view/4,get_row_count/1,reduce_to_count/1,fold_reduce/4,
-    extract_map_view/1,get_group_server/2,get_group_info/2,
-    cleanup_index_files/1,config_change/2]).
+         detuple_kvs/2,init/1,terminate/2,handle_call/3,handle_cast/2,
+         handle_info/2,code_change/3,get_reduce_view/4,
+         get_map_view/4,get_row_count/1,reduce_to_count/1,fold_reduce/4,
+         extract_map_view/1,get_group_server/2,get_group_info/2,
+         cleanup_index_files/1,config_change/2]).
 
 -include("couch_db.hrl").
 
@@ -29,17 +29,6 @@
 start_link() ->
     gen_server:start_link({local, couch_view}, couch_view, [], []).
 
-get_temp_updater(DbName, Language, DesignOptions, MapSrc, RedSrc) ->
-    % make temp group
-    % do we need to close this db?
-    {ok, _Db, Group} =
-        couch_view_group:open_temp_group(DbName, Language, DesignOptions, MapSrc, RedSrc),
-    case gen_server:call(couch_view, {get_group_server, DbName, Group}) of
-    {ok, Pid} ->
-        Pid;
-    Error ->
-        throw(Error)
-    end.
 
 get_group_server(DbName, GroupId) ->
     % get signature for group
@@ -65,10 +54,6 @@ get_group(Db, GroupId, Stale) ->
             get_group_server(couch_db:name(Db), GroupId),
             MinUpdateSeq).
 
-get_temp_group(Db, Language, DesignOptions, MapSrc, RedSrc) ->
-    couch_view_group:request_group(
-        get_temp_updater(couch_db:name(Db), Language, DesignOptions, MapSrc, RedSrc),
-        couch_db:get_update_seq(Db)).
 
 get_group_info(Db, GroupId) ->
     couch_view_group:request_group_info(
@@ -109,10 +94,6 @@ get_row_count(#view{btree=Bt}) ->
     {ok, {Count, _Reds}} = couch_btree:full_reduce(Bt),
     {ok, Count}.
 
-get_temp_reduce_view(Db, Language, DesignOptions, MapSrc, RedSrc) ->
-    {ok, #group{views=[View]}=Group} =
-        get_temp_group(Db, Language, DesignOptions, MapSrc, RedSrc),
-    {ok, {temp_reduce, View}, Group}.
 
 
 get_reduce_view(Db, GroupId, Name, Update) ->
@@ -154,12 +135,6 @@ expand_dups([{Key, {dups, Vals}} | Rest], Acc) ->
 expand_dups([KV | Rest], Acc) ->
     expand_dups(Rest, [KV | Acc]).
 
-fold_reduce({temp_reduce, #view{btree=Bt}}, Fun, Acc, Options) ->
-    WrapperFun = fun({GroupedKey, _}, PartialReds, Acc0) ->
-            {_, [Red]} = couch_btree:final_reduce(Bt, PartialReds),
-            Fun(GroupedKey, Red, Acc0)
-        end,
-    couch_btree:fold_reduce(Bt, WrapperFun, Acc, Options);
 
 fold_reduce({reduce, NthRed, Lang, #view{btree=Bt, reduce_funs=RedFuns}}, Fun, Acc, Options) ->
     PreResultPadding = lists:duplicate(NthRed - 1, []),
@@ -188,9 +163,6 @@ get_key_pos(Key, [_|Rest], N) ->
     get_key_pos(Key, Rest, N+1).
 
 
-get_temp_map_view(Db, Language, DesignOptions, Src) ->
-    {ok, #group{views=[View]}=Group} = get_temp_group(Db, Language, DesignOptions, Src, []),
-    {ok, View, Group}.
 
 get_map_view(Db, GroupId, Name, Stale) ->
     case get_group(Db, GroupId, Stale) of
