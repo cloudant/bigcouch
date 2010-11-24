@@ -26,6 +26,7 @@ apps/couch/test/temp*
 apps/couch/test/etap/
 !apps/couch/test/etap/*.t
 
+
 # dev
 rel/dev*
 rel/tmpdata
