@@ -222,24 +222,34 @@ handle_rexi_calls_req(#httpd{method='GET'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
     NoCalls = list_to_integer(couch_httpd:qs_value(Req, "n", "20")),
     {ok, Data} = rexi_server:calls(NoCalls),
-    %% TODO: convert to JSON format  
-    Msgs = lists:map(fun(Elem) ->
-                         [Ts,From,Nonce,M,F,A] = Elem,
-                         io_lib:format("[~p] from: ~p nonce: ~p ~n ~p ~p ~p ~n",
-                        [calendar:now_to_datetime(Ts),From,Nonce,M,F,A])
-                     end,Data),
-    {ok, Resp} = start_chunked_response(Req, 200, [
-        {"Content-Type", "text/plain; charset=utf-8"},
-        {"Content-Length", integer_to_list(length(Msgs))}
-    ]),
-    send_chunk(Resp,Msgs),
-    last_chunk(Resp);
+    Msgs = rexi_data_to_json(Data),
+    send_json(Req,200,Msgs);
+
 handle_rexi_calls_req(#httpd{method='PUT'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
     NewSize = list_to_integer(couch_httpd:qs_value(Req, "cache_size", "20")),
-    {ok, OldSize} = rexi_server:set_call_cache_size(NewSize),    
+    {ok, OldSize} = rexi_server:set_call_cache_size(NewSize),
     send_json(Req, 200, OldSize);
+
 handle_rexi_calls_req(Req) ->
     send_method_not_allowed(Req, "GET,PUT").
+
+rexi_data_to_json(Data) ->
+    {lists:map(fun(Elem) ->
+                       [Ts,From,Nonce,M,F,A] = Elem,
+                       DateTime =
+                           httpd_util:rfc1123_date(calendar:now_to_local_time(Ts)),
+                       {rexi_call,
+                        {[
+                          {date,?l2b(DateTime)},
+                          {from,?l2b(io_lib:format("~p",[From]))},
+                          {nonce,?l2b(Nonce)},
+                          {module,M},
+                          {function,F}
+                          %% TODO: issues with UTF-8 chars in JS
+                          %%{args,?l2b(couch_util:url_encode(io_lib:format("~p",[A])))}
+                          %%{args,?l2b(io_lib:format("~p",[A]))}
+                         ]}}
+               end, Data)}.
 
 
