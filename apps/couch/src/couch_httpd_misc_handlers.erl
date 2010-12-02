@@ -227,8 +227,8 @@ handle_rexi_calls_req(#httpd{method='GET'}=Req) ->
 
 handle_rexi_calls_req(#httpd{method='PUT'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
-    NewSize = list_to_integer(couch_httpd:qs_value(Req, "cache_size", "20")),
-    {ok, OldSize} = rexi_server:set_call_cache_size(NewSize),
+    NewSize = list_to_integer(couch_httpd:qs_value(Req, "buffer_size", "20")),
+    {ok, OldSize} = rexi_server:set_call_buffer_size(NewSize),
     send_json(Req, 200, OldSize);
 
 handle_rexi_calls_req(Req) ->
