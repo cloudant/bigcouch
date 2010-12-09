@@ -236,14 +236,20 @@ handle_rexi_calls_req(Req) ->
 
 rexi_data_to_json(Data) ->
     {lists:map(fun(Elem) ->
-                       [Ts,From,Nonce,M,F,A] = Elem,
+                       [Ts,From,Nonce,M,F,_A] = Elem,
                        DateTime =
                            httpd_util:rfc1123_date(calendar:now_to_local_time(Ts)),
+                       NonceFormat = case Nonce of
+                                         undefined ->
+                                             "undefined";
+                                         Other -> Other
+                                     end,
+
                        {rexi_call,
                         {[
                           {date,?l2b(DateTime)},
                           {from,?l2b(io_lib:format("~p",[From]))},
-                          {nonce,?l2b(Nonce)},
+                          {nonce,?l2b(NonceFormat)},
                           {module,M},
                           {function,F}
                           %% TODO: issues with UTF-8 chars in JS
