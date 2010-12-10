@@ -419,7 +419,7 @@ open_index_file(compact, RootDir, DbName, GroupSig) ->
 
 
 open_db_group(DbName, GroupId) ->
-    FullDbName = mem3_util:extract_db_name(DbName),
+    FullDbName = mem3:db_name(DbName),
     {Pid, Ref} =
         spawn_monitor(fun() ->
                           exit(fabric:open_doc(FullDbName,
