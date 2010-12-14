@@ -220,23 +220,22 @@ handle_log_req(Req) ->
 
 handle_rexi_calls_req(#httpd{method='GET'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
-    NoCalls = list_to_integer(couch_httpd:qs_value(Req, "n", "20")),
-    {ok, Data} = rexi_server:calls(NoCalls),
+    {ok, Data} = rexi:get_errors(),
     Msgs = rexi_data_to_json(Data),
     send_json(Req,200,Msgs);
 
 handle_rexi_calls_req(#httpd{method='PUT'}=Req) ->
     ok = couch_httpd:verify_is_server_admin(Req),
-    NewSize = list_to_integer(couch_httpd:qs_value(Req, "buffer_size", "20")),
-    {ok, OldSize} = rexi_server:set_call_buffer_size(NewSize),
-    send_json(Req, 200, OldSize);
+    Limit = list_to_integer(couch_httpd:qs_value(Req, "errors_limit", "20")),
+    ok = rexi:set_error_limit(Limit),
+    send_json(Req, 200);
 
 handle_rexi_calls_req(Req) ->
     send_method_not_allowed(Req, "GET,PUT").
 
 rexi_data_to_json(Data) ->
     {lists:map(fun(Elem) ->
-                       [Ts,From,Nonce,M,F,_A] = Elem,
+                       {error,Ts,From,{M,F,A},Nonce,_Stack} = Elem,
                        DateTime =
                            httpd_util:rfc1123_date(calendar:now_to_local_time(Ts)),
                        NonceFormat = case Nonce of
@@ -254,7 +253,7 @@ rexi_data_to_json(Data) ->
                           {function,F}
                           %% TODO: issues with UTF-8 chars in JS
                           %%{args,?l2b(couch_util:url_encode(io_lib:format("~p",[A])))}
-                          %%{args,?l2b(io_lib:format("~p",[A]))}
+
                          ]}}
                end, Data)}.
 
