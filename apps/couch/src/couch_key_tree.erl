@@ -61,6 +61,7 @@
 
 % partial trees arranged by how much they are cut off.
 
+%% @doc Merge a path with a list of paths and stem to the given length.
 -spec merge([path()], path(), pos_integer()) -> {[path()],
     conflicts | no_conflicts}.
 merge(Paths, Path, Depth) ->
