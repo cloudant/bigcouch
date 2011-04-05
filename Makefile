@@ -14,12 +14,10 @@
 
 all:  compile
 
-appfile = apps/couch/ebin/couch.app
 compile:
 	@echo "==> couchjs (compile)"
 	@cd couchjs && python scons/scons.py
 	@./rebar compile
-	@cat $(appfile) | sed s/%VSN%/`git describe --match 1.*`/ > $(appfile)
 
 clean:
 	@echo "==> couchjs (clean)"
