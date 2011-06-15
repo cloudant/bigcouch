@@ -21,6 +21,7 @@
     root,
     extract_kv,
     assemble_kv,
+    chunk_size = 1279,
     less,
     reduce = nil
     }).
@@ -48,6 +49,8 @@ set_options(Bt, []) ->
     Bt;
 set_options(Bt, [{split, Extract}|Rest]) ->
     set_options(Bt#btree{extract_kv=Extract}, Rest);
+set_options(Bt, [{chunk_size, Size}|Rest]) ->
+    set_options(Bt#btree{chunk_size=Size}, Rest);
 set_options(Bt, [{join, Assemble}|Rest]) ->
     set_options(Bt#btree{assemble_kv=Assemble}, Rest);
 set_options(Bt, [{less, Less}|Rest]) ->
@@ -281,9 +284,9 @@ complete_root(Bt, KPs) ->
 % written. Plus with the "case byte_size(term_to_binary(InList)) of" code
 % it's probably really inefficient.
 
-chunkify(InList) ->
-    BaseChunkSize = list_to_integer(couch_config:get("couchdb",
-        "btree_chunk_size", "1279")),
+chunkify(InList, BaseChunkSize) ->
+    %% BaseChunkSize = list_to_integer(couch_config:get("couchdb",
+    %%     "btree_chunk_size", "1279")),
     case byte_size(term_to_binary(InList)) of
     Size when Size > BaseChunkSize ->
         NumberOfChunksLikely = ((Size div BaseChunkSize) + 1),
@@ -345,7 +348,7 @@ get_node(#btree{fd = Fd}, NodePos) ->
 
 write_node(Bt, NodeType, NodeList) ->
     % split up nodes into smaller sizes
-    NodeListList = chunkify(NodeList),
+    NodeListList = chunkify(NodeList, Bt#btree.chunk_size),
     % now write out each chunk and return the KeyPointer pairs for those nodes
     ResultList = [
         begin
