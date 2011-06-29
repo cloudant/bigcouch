@@ -112,8 +112,12 @@ open_ref_counted(MainPid, OpenedPid) ->
     gen_server:call(MainPid, {open_ref_count, OpenedPid}).
 
 is_idle(#db{compactor_pid=nil, waiting_delayed_commit=nil} = Db) ->
-    {monitored_by, Pids} = erlang:process_info(Db#db.fd, monitored_by),
-    (Pids -- [Db#db.main_pid, whereis(couch_stats_collector)]) =:= [];
+    case erlang:process_info(Db#db.fd, monitored_by) of
+    undefined ->
+        true;
+    {monitored_by, Pids} ->
+        (Pids -- [Db#db.main_pid, whereis(couch_stats_collector)]) =:= []
+    end;
 is_idle(_Db) ->
     false.
 
