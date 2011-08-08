@@ -56,7 +56,7 @@ handle_changes(#changes_args{filter=Raw, style=Style}=Args1, Req, Db) ->
     true ->
         fun(Callback) ->
             start_sending_changes(Callback, Args#changes_args.feed),
-            {ok, {_, LastSeq, _Prepend, _, _, _, _, _}} =
+            {ok, {_, LastSeq, _Prepend, _, _, _, _, _, _}} =
                 send_changes(
                     Args#changes_args{feed="normal"},
                     Callback,
@@ -80,7 +80,7 @@ make_filter_fun(Filter, Style, Req, Db) when is_list(Filter) ->
         % validate that the ddoc has the filter fun
         #doc{body={Props}} = DDoc,
         couch_util:get_nested_json_value({Props}, [<<"filters">>, FName]),
-        fun(DocInfo) ->
+        fun(Db2, DocInfo) ->
             DocInfos =
             case Style of
             main_only ->
@@ -89,10 +89,10 @@ make_filter_fun(Filter, Style, Req, Db) when is_list(Filter) ->
                 [DocInfo#doc_info{revs=[Rev]}|| Rev <- DocInfo#doc_info.revs]
             end,
             Docs = [Doc || {ok, Doc} <- [
-                    couch_db:open_doc(Db, DocInfo2, [deleted, conflicts])
+                    couch_db:open_doc(Db2, DocInfo2, [deleted, conflicts])
                         || DocInfo2 <- DocInfos]],
             {ok, Passes} = couch_query_servers:filter_docs(
-                Req, Db, DDoc, FName, Docs
+                Req, Db2, DDoc, FName, Docs
             ),
             [{[{<<"rev">>, couch_doc:rev_to_str({RevPos,RevId})}]}
                 || {Pass, #doc{revs={RevPos,[RevId|_]}}}
@@ -103,7 +103,7 @@ make_filter_fun(Filter, Style, Req, Db) when is_list(Filter) ->
             "filter parameter must be of the form `designname/filtername`"})
     end;
 make_filter_fun(_, Style, _, _) ->
-    fun(DI) -> ?MODULE:filter(DI, Style) end.
+    fun(_, DI) -> ?MODULE:filter(DI, Style) end.
 
 configure_filter(Filter, Style, Req, Db) when is_list(Filter) ->
     case [?l2b(couch_httpd:unquote(X)) || X <- string:tokens(Filter, "/")] of
@@ -179,6 +179,7 @@ send_changes(Args, Callback, Db, StartSeq, Prepend) ->
     #changes_args{
         style = Style,
         include_docs = IncludeDocs,
+        conflicts = Conflicts,
         limit = Limit,
         feed = ResponseType,
         dir = Dir,
@@ -191,7 +192,7 @@ send_changes(Args, Callback, Db, StartSeq, Prepend) ->
         fun changes_enumerator/2,
         [{dir, Dir}],
         {Db, StartSeq, Prepend, FilterFun, Callback, ResponseType, Limit,
-            IncludeDocs}
+            IncludeDocs, Conflicts}
     ).
 
 keep_sending_changes(Args, Callback, Db, StartSeq, Prepend, Timeout,
@@ -201,7 +202,7 @@ keep_sending_changes(Args, Callback, Db, StartSeq, Prepend, Timeout,
         limit = Limit
     } = Args,
     % ?LOG_INFO("send_changes start ~p",[StartSeq]),
-    {ok, {_, EndSeq, Prepend2, _, _, _, NewLimit, _}} = send_changes(
+    {ok, {_, EndSeq, Prepend2, _, _, _, NewLimit, _, _}} = send_changes(
         Args#changes_args{dir=fwd}, Callback, Db, StartSeq, Prepend
     ),
     % ?LOG_INFO("send_changes last ~p",[EndSeq]),
@@ -236,53 +237,57 @@ end_sending_changes(Callback, EndSeq, ResponseType) ->
     Callback({stop, EndSeq}, ResponseType).
 
 changes_enumerator(DocInfo, {Db, _, _, FilterFun, Callback, "continuous",
-    Limit, IncludeDocs}) ->
+    Limit, IncludeDocs, Conflicts}) ->
 
-    #doc_info{id=Id, high_seq=Seq, revs=[#rev_info{deleted=Del,rev=Rev}|_]}
-        = DocInfo,
-    Results0 = FilterFun(DocInfo),
+    #doc_info{high_seq = Seq} = DocInfo,
+    Results0 = FilterFun(Db, DocInfo),
     Results = [Result || Result <- Results0, Result /= null],
     Go = if Limit =< 1 -> stop; true -> ok end,
     case Results of
     [] ->
         {Go, {Db, Seq, nil, FilterFun, Callback, "continuous", Limit,
-                IncludeDocs}
+                IncludeDocs, Conflicts}
         };
     _ ->
-        ChangesRow = changes_row(Db, Seq, Id, Del, Results, Rev, IncludeDocs),
+        ChangesRow = changes_row(Db, Results, DocInfo, IncludeDocs, Conflicts),
         Callback({change, ChangesRow, <<"">>}, "continuous"),
         {Go, {Db, Seq, nil, FilterFun, Callback, "continuous",  Limit - 1,
-                IncludeDocs}
+                IncludeDocs, Conflicts}
         }
     end;
 changes_enumerator(DocInfo, {Db, _, Prepend, FilterFun, Callback, ResponseType,
-    Limit, IncludeDocs}) ->
+    Limit, IncludeDocs, Conflicts}) ->
 
-    #doc_info{id=Id, high_seq=Seq, revs=[#rev_info{deleted=Del,rev=Rev}|_]}
-        = DocInfo,
-    Results0 = FilterFun(DocInfo),
+    #doc_info{high_seq = Seq} = DocInfo,
+    Results0 = FilterFun(Db, DocInfo),
     Results = [Result || Result <- Results0, Result /= null],
-    Go = if Limit =< 1 -> stop; true -> ok end,
+    Go = if (Limit =< 1) andalso Results =/= [] -> stop; true -> ok end,
     case Results of
     [] ->
         {Go, {Db, Seq, Prepend, FilterFun, Callback, ResponseType, Limit,
-                IncludeDocs}
+                IncludeDocs, Conflicts}
         };
     _ ->
-        ChangesRow = changes_row(Db, Seq, Id, Del, Results, Rev, IncludeDocs),
+        ChangesRow = changes_row(Db, Results, DocInfo, IncludeDocs, Conflicts),
         Callback({change, ChangesRow, Prepend}, ResponseType),
         {Go, {Db, Seq, <<",\n">>, FilterFun, Callback, ResponseType, Limit - 1,
-                IncludeDocs}
+                IncludeDocs, Conflicts}
         }
     end.
 
 
-changes_row(Db, Seq, Id, Del, Results, Rev, true) ->
+changes_row(Db, Results, DocInfo, IncludeDoc, Conflicts) ->
+    #doc_info{
+        id = Id, high_seq = Seq, revs = [#rev_info{deleted = Del} | _]
+    } = DocInfo,
     {[{<<"seq">>, Seq}, {<<"id">>, Id}, {<<"changes">>, Results}] ++
-        deleted_item(Del) ++ couch_httpd_view:doc_member(Db, {Id, Rev})};
-changes_row(_, Seq, Id, Del, Results, _, false) ->
-    {[{<<"seq">>, Seq}, {<<"id">>, Id}, {<<"changes">>, Results}] ++
-        deleted_item(Del)}.
+        deleted_item(Del) ++ case IncludeDoc of
+            true ->
+                Options = if Conflicts -> [conflicts]; true -> [] end,
+                couch_httpd_view:doc_member(Db, DocInfo, Options);
+            false ->
+                []
+        end}.
 
 deleted_item(true) -> [{deleted, true}];
 deleted_item(_) -> [].

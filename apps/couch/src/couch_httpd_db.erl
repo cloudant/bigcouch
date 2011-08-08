@@ -106,10 +106,16 @@ handle_changes_req(#httpd{method='GET'}=Req, Db) ->
             FeedChangesFun(MakeCallback(Resp))
         end
     end,
-    couch_stats_collector:track_process_count(
+    couch_stats_collector:increment(
         {httpd, clients_requesting_changes}
     ),
-    WrapperFun(ChangesFun);
+    try
+        WrapperFun(ChangesFun)
+    after
+    couch_stats_collector:decrement(
+        {httpd, clients_requesting_changes}
+    )
+    end;
 
 handle_changes_req(#httpd{path_parts=[_,<<"_changes">>]}=Req, _Db) ->
     send_method_not_allowed(Req, "GET,HEAD").
@@ -497,12 +503,13 @@ all_docs_view(Req, Db, Keys) ->
         nil ->
             FoldlFun = couch_httpd_view:make_view_fold_fun(Req, QueryArgs, CurrentEtag, Db, UpdateSeq,
                 TotalRowCount, #view_fold_helper_funs{
-                    reduce_count = fun couch_db:enum_docs_reduce_to_count/1
+                    reduce_count = fun couch_db:enum_docs_reduce_to_count/1,
+                    send_row = fun all_docs_send_json_view_row/6
                 }),
             AdapterFun = fun(#full_doc_info{id=Id}=FullDocInfo, Offset, Acc) ->
                 case couch_doc:to_doc_info(FullDocInfo) of
-                #doc_info{revs=[#rev_info{deleted=false, rev=Rev}|_]} ->
-                    FoldlFun({{Id, Id}, {[{rev, couch_doc:rev_to_str(Rev)}]}}, Offset, Acc);
+                #doc_info{revs=[#rev_info{deleted=false}|_]} = DocInfo ->
+                    FoldlFun({{Id, Id}, DocInfo}, Offset, Acc);
                 #doc_info{revs=[#rev_info{deleted=true}|_]} ->
                     {ok, Acc}
                 end
@@ -514,7 +521,8 @@ all_docs_view(Req, Db, Keys) ->
         _ ->
             FoldlFun = couch_httpd_view:make_view_fold_fun(Req, QueryArgs, CurrentEtag, Db, UpdateSeq,
                 TotalRowCount, #view_fold_helper_funs{
-                    reduce_count = fun(Offset) -> Offset end
+                    reduce_count = fun(Offset) -> Offset end,
+                    send_row = fun all_docs_send_json_view_row/6
                 }),
             KeyFoldFun = case Dir of
             fwd ->
@@ -526,10 +534,8 @@ all_docs_view(Req, Db, Keys) ->
                 fun(Key, FoldAcc) ->
                     DocInfo = (catch couch_db:get_doc_info(Db, Key)),
                     Doc = case DocInfo of
-                    {ok, #doc_info{id=Id, revs=[#rev_info{deleted=false, rev=Rev}|_]}} ->
-                        {{Id, Id}, {[{rev, couch_doc:rev_to_str(Rev)}]}};
-                    {ok, #doc_info{id=Id, revs=[#rev_info{deleted=true, rev=Rev}|_]}} ->
-                        {{Id, Id}, {[{rev, couch_doc:rev_to_str(Rev)}, {deleted, true}]}};
+                    {ok, #doc_info{id = Id} = Di} ->
+                        {{Id, Id}, Di};
                     not_found ->
                         {{Key, error}, not_found};
                     _ ->
@@ -542,6 +548,33 @@ all_docs_view(Req, Db, Keys) ->
             couch_httpd_view:finish_view_fold(Req, TotalRowCount, 0, FoldResult, JsonParams)
         end
     end).
+
+all_docs_send_json_view_row(Resp, Db, KV, IncludeDocs, Conflicts, RowFront) ->
+    JsonRow = all_docs_view_row_obj(Db, KV, IncludeDocs, Conflicts),
+    send_chunk(Resp, RowFront ++ ?JSON_ENCODE(JsonRow)),
+    {ok, ",\r\n"}.
+
+all_docs_view_row_obj(_Db, {{DocId, error}, Value}, _IncludeDocs, _Conflicts) ->
+    {[{key, DocId}, {error, Value}]};
+all_docs_view_row_obj(Db, {_KeyDocId, DocInfo}, true, Conflicts) ->
+    case DocInfo of
+    #doc_info{revs = [#rev_info{deleted = true} | _]} ->
+        {all_docs_row(DocInfo) ++ [{doc, null}]};
+    _ ->
+        {all_docs_row(DocInfo) ++ couch_httpd_view:doc_member(
+            Db, DocInfo, if Conflicts -> [conflicts]; true -> [] end)}
+    end;
+all_docs_view_row_obj(_Db, {_KeyDocId, DocInfo}, _IncludeDocs, _Conflicts) ->
+    {all_docs_row(DocInfo)}.
+
+all_docs_row(#doc_info{id = Id, revs = [RevInfo | _]}) ->
+    #rev_info{rev = Rev, deleted = Del} = RevInfo,
+    [ {id, Id}, {key, Id},
+        {value, {[{rev, couch_doc:rev_to_str(Rev)}] ++ case Del of
+            true -> [{deleted, true}];
+            false -> []
+            end}} ].
+
 
 db_doc_req(#httpd{method='DELETE'}=Req, Db, DocId) ->
     % check for the existence of the doc to handle the 404 case.
@@ -656,10 +689,12 @@ db_doc_req(#httpd{method='PUT'}=Req, Db, DocId) ->
     RespHeaders = [{"Location", Loc}],
     case couch_util:to_list(couch_httpd:header_value(Req, "Content-Type")) of
     ("multipart/related;" ++ _) = ContentType ->
-        {ok, Doc0} = couch_doc:doc_from_multi_part_stream(ContentType,
-                fun() -> receive_request_data(Req) end),
+        {ok, Doc0, WaitFun} = couch_doc:doc_from_multi_part_stream(
+            ContentType, fun() -> receive_request_data(Req) end),
         Doc = couch_doc_from_req(Req, DocId, Doc0),
-        update_doc(Req, Db, DocId, Doc, RespHeaders, UpdateType);
+        Result = update_doc(Req, Db, DocId, Doc, RespHeaders, UpdateType),
+        WaitFun(),
+        Result;
     _Else ->
         case couch_httpd:qs_value(Req, "batch") of
         "ok" ->
@@ -734,7 +769,7 @@ send_doc_efficiently(Req, #doc{atts=Atts}=Doc, Headers, Options) ->
         true ->
             Boundary = couch_uuids:random(),
             JsonBytes = ?JSON_ENCODE(couch_doc:to_json_obj(Doc, 
-                    [attachments, follows|Options])),
+                    [attachments, follows, att_encoding_info | Options])),
             {ContentType, Len} = couch_doc:len_doc_to_multi_part_stream(
                     Boundary,JsonBytes, Atts, true),
             CType = {<<"Content-Type">>, ContentType},
@@ -777,7 +812,14 @@ send_docs_multipart(Req, Results, Options1) ->
     couch_httpd:last_chunk(Resp).
 
 receive_request_data(Req) ->
-    {couch_httpd:recv(Req, 0), fun() -> receive_request_data(Req) end}.
+    receive_request_data(Req, couch_httpd:body_length(Req)).
+
+receive_request_data(Req, LenLeft) when LenLeft > 0 ->
+    Len = erlang:min(4096, LenLeft),
+    Data = couch_httpd:recv(Req, Len),
+    {Data, fun() -> receive_request_data(Req, LenLeft - iolist_size(Data)) end};
+receive_request_data(_Req, _) ->
+    throw(<<"expected more data">>).
     
 update_doc_result_to_json({{Id, Rev}, Error}) ->
         {_Code, Err, Msg} = couch_httpd:error_info(Error),
@@ -886,10 +928,17 @@ db_attachment_req(#httpd{method='GET'}=Req, Db, DocId, FileNameParts) ->
             {"Cache-Control", "must-revalidate"},
             {"Content-Type", binary_to_list(Type)}
         ] ++ case ReqAcceptsAttEnc of
-        true ->
+        true when Enc =/= identity ->
+            % RFC 2616 says that the 'identify' encoding should not be used in
+            % the Content-Encoding header
             [{"Content-Encoding", atom_to_list(Enc)}];
         _ ->
             []
+        end ++ if
+            Enc =:= identity orelse ReqAcceptsAttEnc =:= true ->
+                [{"Content-MD5", base64:encode(Att#att.md5)}];
+            true ->
+                []
         end,
         Len = case {Enc, ReqAcceptsAttEnc} of
         {identity, _} ->
@@ -982,7 +1031,7 @@ db_attachment_req(#httpd{method=Method,mochi_req=MochiReq}=Req, Db, DocId, FileN
                         end,
                         
                         
-                        fun() -> couch_httpd:recv(Req, 0) end;
+                        fun(Size) -> couch_httpd:recv(Req, Size) end;
                     Length ->
                         exit({length_not_integer, Length})
                     end,
@@ -1137,6 +1186,8 @@ parse_changes_query(Req) ->
             Args#changes_args{timeout=list_to_integer(Value)};
         {"include_docs", "true"} ->
             Args#changes_args{include_docs=true};
+        {"conflicts", "true"} ->
+            Args#changes_args{conflicts=true};
         {"filter", _} ->
             Args#changes_args{filter=Value};
         _Else -> % unknown key value pair, ignore.
@@ -1183,34 +1234,7 @@ validate_attachment_name(Name) when is_list(Name) ->
 validate_attachment_name(<<"_",_/binary>>) ->
     throw({bad_request, <<"Attachment name can't start with '_'">>});
 validate_attachment_name(Name) ->
-    case is_valid_utf8(Name) of
+    case couch_util:validate_utf8(Name) of
         true -> Name;
         false -> throw({bad_request, <<"Attachment name is not UTF-8 encoded">>})
-    end.
-
-%% borrowed from mochijson2:json_bin_is_safe()
-is_valid_utf8(<<>>) ->
-    true;
-is_valid_utf8(<<C, Rest/binary>>) ->
-    case C of
-        $\" ->
-            false;
-        $\\ ->
-            false;
-        $\b ->
-            false;
-        $\f ->
-            false;
-        $\n ->
-            false;
-        $\r ->
-            false;
-        $\t ->
-            false;
-        C when C >= 0, C < $\s; C >= 16#7f, C =< 16#10FFFF ->
-            false;
-        C when C < 16#7f ->
-            is_valid_utf8(Rest);
-        _ ->
-            false
     end.

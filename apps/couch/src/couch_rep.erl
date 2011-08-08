@@ -18,6 +18,7 @@
 -export([replicate/2, checkpoint/1]).
 
 -include("couch_db.hrl").
+-include_lib("ibrowse/include/ibrowse.hrl").
 
 -record(state, {
     changes_feed,
@@ -77,8 +78,14 @@ replicate({Props}=PostBody, UserCtx) ->
         {error, not_found} ->
      {error, not_found};
         ok ->
-     ok = supervisor:delete_child(couch_rep_sup, BaseId ++ Extension),
-            {ok, {cancelled, ?l2b(BaseId)}}
+     case supervisor:delete_child(couch_rep_sup, BaseId ++ Extension) of
+         ok ->
+             {ok, {cancelled, ?l2b(BaseId)}};
+         {error, not_found} ->
+             {ok, {cancelled, ?l2b(BaseId)}};
+         {error, _} = Error ->
+             Error
+     end
  end;
     false ->
         Server = start_replication_server(Replicator),
@@ -321,7 +328,14 @@ start_replication_server(Replicator) ->
             throw({db_not_found, <<"could not open ", DbUrl/binary>>});
         {error, {unauthorized, DbUrl}} ->
             throw({unauthorized,
-                <<"unauthorized to access database ", DbUrl/binary>>})
+                <<"unauthorized to access database ", DbUrl/binary>>});
+        {error, {'EXIT', {badarg,
+            [{erlang, apply, [gen_server, start_link, undefined]} | _]}}} ->
+            % Clause to deal with a change in the supervisor module introduced
+            % in R14B02. For more details consult the thread at:
+            %     http://erlang.org/pipermail/erlang-bugs/2011-March/002273.html
+            _ = supervisor:delete_child(couch_rep_sup, RepId),
+            start_replication_server(Replicator)
         end;
     {error, {already_started, Pid}} ->
         ?LOG_DEBUG("replication ~p already running at ~p", [RepId, Pid]),
@@ -390,7 +404,7 @@ dbname(#db{name = Name}) ->
 
 dbinfo(#http_db{} = Db) ->
     {DbProps} = couch_rep_httpc:request(Db),
-    [{list_to_existing_atom(?b2l(K)), V} || {K,V} <- DbProps];
+    [{couch_util:to_existing_atom(K), V} || {K,V} <- DbProps];
 dbinfo(Db) ->
     {ok, Info} = couch_db:get_db_info(Db),
     Info.
@@ -787,9 +801,13 @@ parse_proxy_params(ProxyUrl) when is_binary(ProxyUrl) ->
 parse_proxy_params([]) ->
     [];
 parse_proxy_params(ProxyUrl) ->
-    {url, _, Base, Port, User, Passwd, _Path, _Proto} =
-        ibrowse_lib:parse_url(ProxyUrl),
-    [{proxy_host, Base}, {proxy_port, Port}] ++
+    #url{
+        host = Host,
+        port = Port,
+        username = User,
+        password = Passwd
+    } = ibrowse_lib:parse_url(ProxyUrl),
+    [{proxy_host, Host}, {proxy_port, Port}] ++
         case is_list(User) andalso is_list(Passwd) of
         false ->
             [];

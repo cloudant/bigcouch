@@ -193,6 +193,7 @@
 
     view_type = nil,
     include_docs = false,
+    conflicts = false,
     stale = false,
     multi_get = false,
     callback = nil,
@@ -285,7 +286,8 @@
     heartbeat,
     timeout,
     filter = "",
-    include_docs = false
+    include_docs = false,
+    conflicts = false
 }).
 
 -record(proc, {

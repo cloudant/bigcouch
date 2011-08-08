@@ -1,3 +1,4 @@
+#!/usr/bin/env escript
 % Licensed under the Apache License, Version 2.0 (the "License"); you may not
 % use this file except in compliance with the License. You may obtain a copy of
 % the License at
@@ -10,25 +11,21 @@
 % License for the specific language governing permissions and limitations under
 % the License.
 
--module(test_util).
+main(_) ->
+    test_util:init_code_path(),
+    etap:plan(1),
+    case (catch test()) of
+        ok ->
+            etap:end_tests();
+        Other ->
+            etap:diag(io_lib:format("Test died abnormally: ~p", [Other])),
+            etap:bail(Other)
+    end,
+    ok.
 
--export([init_code_path/0]).
--export([source_file/1, build_file/1]).
-
-srcdir() ->
-    "@abs_top_srcdir@".
-
-builddir() ->
-    "@abs_top_builddir@".
-
-init_code_path() ->
-    Paths = ["etap", "couch", "oauth", "ibrowse", "mochiweb"],
-    lists:foreach(fun(Name) ->
-        code:add_patha(filename:join([builddir(), "ebin", Name]))
-    end, Paths).
-
-source_file(Name) ->
-    filename:join([srcdir(), Name]).
-
-build_file(Name) ->
-    filename:join([builddir(), Name]).
+test() ->
+    etap:is(
+      oauth_uri:params_from_string("realm=http://localhost:5984"),
+      [{"realm","http://localhost:5984"}],
+      "decode should handle non-percent encoded input."),
+    ok.

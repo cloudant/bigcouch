@@ -133,12 +133,11 @@ terminate(_Arg, {Fd, _LoggingLevel, _Sasl}) ->
 log(Fd, Pid, Level, undefined, Format, Args) ->
     log(Fd, Pid, Level, "--------", Format, Args);
 log(Fd, Pid, Level, Id, Format, Args) ->
-    Msg = io_lib:format(Format, Args),
-    ok = io:format("[~s] [~p] [~s] ~s~n", [Level, Pid, Id, Msg]),
-    Msg2 = re:replace(lists:flatten(Msg),"\\r\\n|\\r|\\n", "\r\n",
-        [global, {return, list}]),
-    ok = io:format(Fd, "[~s] [~s] [~p] [~s] ~s\r~n\r~n",
-        [httpd_util:rfc1123_date(), Level, Pid, Id, Msg2]).
+    ConsoleMsg = unicode:characters_to_binary(io_lib:format(
+            "[~s] [~p] [~s] " ++ Format ++ "~n", [Level, Pid, Id | Args])),
+    FileMsg = ["[", httpd_util:rfc1123_date(), "] ", ConsoleMsg],
+    ok = io:put_chars(ConsoleMsg),
+    ok = io:put_chars(Fd, iolist_to_binary(FileMsg)).
 
 read(Bytes, Offset) ->
     LogFileName = couch_config:get("log", "file"),
