@@ -368,5 +368,8 @@ handle_info({'EXIT', Pid, Reason}, #server{dbs_open=DbsOpen}=Server) ->
     [] ->
         {noreply, Server}
     end;
+handle_info({ping, Pid}, Server) ->
+    Pid ! {pong, node()},
+    {noreply, Server};
 handle_info(Info, Server) ->
     {stop, {unknown_message, Info}, Server}.
