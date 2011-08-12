@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, request_group/2, request_group_info/1]).
+-export([start_link/1, request_group/2, trigger_group_update/2, request_group_info/1]).
 -export([open_db_group/2, open_temp_group/5, design_doc_to_view_group/1,design_root/2]).
 
 %% gen_server callbacks
@@ -53,6 +53,9 @@ request_group_info(Pid) ->
     Error ->
         throw(Error)
     end.
+
+trigger_group_update(Pid, RequestSeq) ->
+    gen_server:cast(Pid, {update_group, RequestSeq}).
 
 % from template
 start_link(InitArgs) ->
@@ -152,6 +155,16 @@ handle_call({start_compact, CompactFun}, _From, State) ->
 handle_call(request_group_info, _From, State) ->
     GroupInfo = get_group_info(State),
     {reply, {ok, GroupInfo}, State}.
+
+handle_cast({update_group, RequestSeq},
+        #group_state{
+            group=#group{current_seq=Seq}=Group,
+            updater_pid=nil}=State) when RequestSeq > Seq ->
+    Owner = self(),
+    Pid = spawn_link(fun()-> couch_view_updater:update(Owner, Group) end),
+    {noreply, State#group_state{updater_pid=Pid}};
+handle_cast({update_group, _RequestSeq}, State) ->
+    {noreply, State};
 
 handle_cast({start_compact, CompactFun}, #group_state{compactor_pid=nil}
         = State) ->
