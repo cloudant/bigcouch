@@ -52,7 +52,7 @@ init({DbName, Filepath, Fd, Options}) ->
 
 
 terminate(_Reason, Db) ->
-    couch_file:close(Db#db.fd),
+    ok = couch_file:close(Db#db.fd),
     couch_util:shutdown_sync(Db#db.compactor_pid),
     couch_util:shutdown_sync(Db#db.fd),
     ok.
@@ -133,8 +133,9 @@ handle_call({purge_docs, IdRevs}, _From, Db) ->
 
     {DocInfoToUpdate, NewSeq} = lists:mapfoldl(
         fun(#full_doc_info{rev_tree=Tree}=FullInfo, SeqAcc) ->
-            Tree2 = couch_key_tree:map_leafs( fun(RevInfo) ->
-                    RevInfo#rev_info{seq=SeqAcc + 1}
+            Tree2 = couch_key_tree:map_leafs(
+                fun(_RevId, {IsDeleted, BodyPointer, _UpdateSeq}) ->
+                    {IsDeleted, BodyPointer, SeqAcc + 1}
                 end, Tree),
             {couch_doc:to_doc_info(FullInfo#full_doc_info{rev_tree=Tree2}),
                 SeqAcc + 1}
@@ -512,9 +513,9 @@ flush_trees(#db{fd=Fd,header=Header}=Db,
                 {ok, NewSummaryPointer} =
                 case Header#db_header.disk_version < 4 of
                 true ->
-                    couch_file:append_term(Fd, {Doc#doc.body, DiskAtts});
+                    {ok, _} = couch_file:append_term(Fd, {Doc#doc.body, DiskAtts});
                 false ->
-                    couch_file:append_term_md5(Fd, {Doc#doc.body, DiskAtts})
+                    {ok, _} = couch_file:append_term_md5(Fd, {Doc#doc.body, DiskAtts})
                 end,
                 #leaf{
                     deleted = IsDeleted,
@@ -666,10 +667,11 @@ update_docs_int(Db, DocsList, NonRepDocs, MergeConflicts, FullCommit) ->
 
     % Check if we just updated any design documents, and update the validation
     % funs if we did.
-    case [1 || <<"_design/",_/binary>> <- Ids] of
-    [] ->
+    case lists:any(
+        fun(<<"_design/", _/binary>>) -> true; (_) -> false end, Ids) of
+    false ->
         Db4 = Db3;
-    _ ->
+    true ->
         Db4 = refresh_validate_doc_funs(Db3)
     end,
 
@@ -687,7 +689,8 @@ compute_data_sizes([FullDocInfo | RestDocInfos], Acc) ->
 
 
 
-
+update_local_docs(Db, []) ->
+    {ok, Db};
 update_local_docs(#db{local_tree=Btree}=Db, Docs) ->
     Ids = [Id || {_Client, #doc{id=Id}} <- Docs],
     OldDocLookups = couch_btree:lookup(Btree, Ids),
