@@ -323,9 +323,12 @@ handle_call({delete, DbName, _Options}, _From, Server) ->
             Server#server{dbs_open=Server#server.dbs_open - 1}
         end,
 
-        %% Delete any leftover .compact files.  If we don't do this a subsequent
-        %% request for this DB will try to open the .compact file and use it.
-        couch_file:delete(Server#server.root_dir, FullFilepath ++ ".compact"),
+        %% Delete any leftover compaction files.  If we don't do this a
+        %% subsequent request for this DB will try to reuse them.
+        DataCompactionFile = FullFilepath ++ ".compact.data",
+        MetaCompactionFile = FullFilepath ++ ".compact.meta",
+        couch_file:delete(Server#server.root_dir, DataCompactionFile),
+        couch_file:delete(Server#server.root_dir, MetaCompactionFile),
 
         case couch_file:delete(Server#server.root_dir, FullFilepath) of
         ok ->
