@@ -15,6 +15,7 @@
 -export([open/2, open/3, query_modify/4, add/2, add_remove/3]).
 -export([fold/4, full_reduce/1, final_reduce/2, foldl/3, foldl/4]).
 -export([fold_reduce/4, lookup/2, get_state/1, set_options/2]).
+-export([copy/2, build_init/1, build_add/2, build_finish/1]).
 
 -record(btree,
     {fd,
@@ -687,3 +688,78 @@ stream_kv_node2(Bt, Reds, PrevKVs, [{K,V} | RestKVs], InRange, Dir, Fun, Acc) ->
             {stop, {PrevKVs, Reds}, Acc2}
         end
     end.
+
+
+copy(Src, Fd) ->
+    Dst = Src#btree{fd=Fd, root=nil},
+    FoldFun = fun(KV, _Red, Acc) ->
+        {ok, build_add(Acc, extract(Src, KV))}
+    end,
+    InitAcc = build_init(Dst),
+    {ok, _, FinalAcc} = foldl(Src, FoldFun, InitAcc),
+    build_finish(FinalAcc).
+
+
+build_init(Bt) ->
+    ChunkSize = couch_config:get("couchdb", "btree_chunk_size", "1279"),
+    ChunkSizeInt = list_to_integer(ChunkSize),
+    {Bt, ChunkSizeInt, nil, [{[], 0}]}.
+
+
+build_add({Bt, ChunkSize, nil, Nodes}, {K, _}=KV) ->
+    % First key insertion
+    NewNodes = build_add(Bt, ChunkSize, kv_node, KV, Nodes),
+    {Bt, ChunkSize, {prev, K}, NewNodes};
+build_add({Bt, ChunkSize, {prev,P}, Nodes}, {K, _}=KV) ->
+    % Each new key must be strictly greater than the
+    % previous key inserted.
+    case less(Bt, P, K) and not less(Bt, K, P) of
+        false -> throw({build_error, invalid_key_order});
+        _ -> ok
+    end,
+    NodeList = build_add(Bt, ChunkSize, kv_node, KV, Nodes),
+    {Bt, ChunkSize, {prev, K}, NodeList}.
+
+
+build_add(_Bt, _ChunkSize, _NodeType, Entry, [{[], 0} | RestNodes]) ->
+    [{[Entry], erlang:external_size(Entry)} | RestNodes];
+build_add(Bt, ChunkSize, kp_node, Entry, []) ->
+    build_add(Bt, ChunkSize, kp_node, Entry, [{[], 0}]);
+build_add(Bt, ChunkSize, NodeType, Entry, [{NodeAcc0, Size0} | RestNodes]) ->
+    NodeAcc = [Entry | NodeAcc0],
+    Size = Size0 + erlang:external_size(Entry),
+    case Size > ChunkSize of
+        true ->
+            Node = lists:reverse(NodeAcc),
+            {LastKey, _} = Entry,
+            {ok, Ptr} = couch_file:append_term(Bt#btree.fd, {NodeType, Node}),
+            Red = reduce_node(Bt, NodeType, Node),
+            KP = {LastKey, {Ptr, Red}},
+            NewNodes = build_add(Bt, ChunkSize, kp_node, KP, RestNodes),
+            [{[], 0} | NewNodes];
+        false ->
+            [{NodeAcc, Size} | RestNodes]
+    end.
+
+
+build_finish({Bt, _ChunkSize, _Prev, NodeList}) ->
+    {ok, Bt#btree{root=build_finish(Bt, kv_node, NodeList)}}.
+
+
+build_finish(_Bt, _NodeType, [{[], _}]) ->
+    nil;
+build_finish(Bt, _NodeType, [{[], _} | RestNodes]) ->
+    build_finish(Bt, kp_node, RestNodes);
+build_finish(Bt, NodeType, [{NodeAcc, _} | RestNodes]) ->
+    Node = lists:reverse(NodeAcc),
+    {ok, Ptr} = couch_file:append_term(Bt#btree.fd, {NodeType, Node}),
+    Red = reduce_node(Bt, NodeType, Node),
+    case RestNodes of
+        [] ->
+            {Ptr, Red};
+        [{KPs, _Size} | RestRestNodes] ->
+            [{LastKey, _} | _Rest] = NodeAcc,
+            KP = {LastKey, {Ptr, Red}},
+            build_finish(Bt, kp_node, [{[KP | KPs], nil} | RestRestNodes])
+    end.
+
