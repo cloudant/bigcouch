@@ -217,7 +217,7 @@ open_async(Server, From, DbName, Filepath, Options) ->
     Parent = self(),
     Opener = spawn_link(fun() ->
         Res = couch_db:start_link(DbName, Filepath, Options),
-        gen_server:call(Parent, {open_result, DbName, Res}, infinity),
+        gen_server:call(Parent, {open_result, DbName, Res, Options}, infinity),
         unlink(Parent)
     end),
     % icky hack of field values - compactor_pid used to store clients
@@ -244,15 +244,21 @@ handle_call({set_max_dbs_open, Max}, _From, Server) ->
     {reply, ok, Server#server{max_dbs_open=Max}};
 handle_call(get_server, _From, Server) ->
     {reply, {ok, Server}, Server};
-handle_call({open_result, DbName, {ok, Db}}, _From, Server) ->
+handle_call({open_result, DbName, {ok, Db}, Options}, _From, Server) ->
     link(Db#db.main_pid),
     % icky hack of field values - compactor_pid used to store clients
     [#db{compactor_pid=Froms}] = ets:lookup(couch_dbs, DbName),
     [gen_server:reply(From, {ok, Db}) || From <- Froms],
     true = ets:insert(couch_dbs, Db),
     true = ets:insert(couch_lru, {DbName, now()}),
+    case lists:member(create, Options) of
+    true ->
+        couch_db_update_notifier:notify({created, DbName});
+    false ->
+        ok
+    end,
     {reply, ok, Server};
-handle_call({open_result, DbName, Error}, _From, Server) ->
+handle_call({open_result, DbName, Error, _Options}, _From, Server) ->
     % icky hack of field values - compactor_pid used to store clients
     [#db{compactor_pid=Froms}] = ets:lookup(couch_dbs, DbName),
     [gen_server:reply(From, Error) || From <- Froms],
