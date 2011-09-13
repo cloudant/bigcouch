@@ -62,6 +62,7 @@ cat > rel/bigcouch.config << EOF
 {user, "$BIGCOUCH_USER"}.
 {node_name, "-name bigcouch"}.
 {cluster_port, 5984}.
+{cluster_ssl, 6984}.
 {backend_port, 5986}.
 EOF
 
@@ -81,6 +82,7 @@ cat > rel/dev$i.config << EOF
 {view_dir, "$DIRPATH/rel/tmpdata/dev$i"}.
 {node_name, "-name dev$i@127.0.0.1"}.
 {cluster_port, `expr 10000 \* $i + 5984`}.
+{cluster_ssl, `expr 10000 \* $i + 6984`}.
 {backend_port, `expr 10000 \* $i + 5986`}.
 EOF
 done
