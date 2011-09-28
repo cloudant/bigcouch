@@ -128,7 +128,7 @@ handle_changes_req1(Req, Db) ->
 handle_compact_req(#httpd{method='POST',path_parts=[DbName,_,Id|_]}=Req, Db) ->
     ok = couch_db:check_is_admin(Db),
     couch_httpd:validate_ctype(Req, "application/json"),
-    ok = couch_view_compactor:start_compact(DbName, Id),
+    {ok, _} = couch_view_compactor:start_compact(DbName, Id),
     send_json(Req, 202, {[{ok, true}]});
 
 handle_compact_req(#httpd{method='POST'}=Req, Db) ->
@@ -477,6 +477,7 @@ db_req(#httpd{path_parts=[_, DocId | FileNameParts]}=Req, Db) ->
     db_attachment_req(Req, Db, DocId, FileNameParts).
 
 all_docs_view(Req, Db, Keys) ->
+    RawCollator = fun(A, B) -> A < B end,
     #view_query_args{
         start_key = StartKey,
         start_docid = StartDocId,
@@ -486,7 +487,8 @@ all_docs_view(Req, Db, Keys) ->
         skip = SkipCount,
         direction = Dir,
         inclusive_end = Inclusive
-    } = QueryArgs = couch_httpd_view:parse_view_params(Req, Keys, map),
+    } = QueryArgs
+      = couch_httpd_view:parse_view_params(Req, Keys, map, RawCollator),
     {ok, Info} = couch_db:get_db_info(Db),
     CurrentEtag = couch_httpd:make_etag(Info),
     couch_httpd:etag_respond(Req, CurrentEtag, fun() ->

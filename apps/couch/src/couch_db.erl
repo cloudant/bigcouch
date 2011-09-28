@@ -23,7 +23,7 @@
 -export([increment_update_seq/1,get_purge_seq/1,purge_docs/2,get_last_purged/1]).
 -export([start_link/3,open_doc_int/3,ensure_full_commit/1,ensure_full_commit/2]).
 -export([set_security/2,get_security/1]).
--export([changes_since/5,changes_since/6,read_doc/2,new_revid/1]).
+-export([changes_since/4,changes_since/5,read_doc/2,new_revid/1]).
 -export([check_is_admin/1, check_is_reader/1, get_doc_count/1]).
 -export([reopen/1, make_doc/5]).
 
@@ -293,8 +293,11 @@ get_design_docs(#db{name = <<"shards/", _/binary>> = ShardName}) ->
         Response
     end;
 get_design_docs(#db{id_tree=Btree}=Db) ->
-    {ok,_, Docs} = couch_btree:fold(Btree,
-        fun(#full_doc_info{id= <<"_design/",_/binary>>}=FullDocInfo, _Reds, AccDocs) ->
+    {ok, _, Docs} = couch_view:fold(
+        #view{btree=Btree},
+        fun(#full_doc_info{deleted = true}, _Reds, AccDocs) ->
+            {ok, AccDocs};
+        (#full_doc_info{id= <<"_design/",_/binary>>}=FullDocInfo, _Reds, AccDocs) ->
             {ok, Doc} = couch_db:open_doc_int(Db, FullDocInfo, []),
             {ok, [Doc | AccDocs]};
         (_, _Reds, AccDocs) ->
@@ -987,10 +990,10 @@ enum_docs_reduce_to_count(Reds) ->
             fun couch_db_updater:btree_by_id_reduce/2, Reds),
     Count.
 
-changes_since(Db, Style, StartSeq, Fun, Acc) ->
-    changes_since(Db, Style, StartSeq, Fun, [], Acc).
-
-changes_since(Db, Style, StartSeq, Fun, Options, Acc) ->
+changes_since(Db, StartSeq, Fun, Acc) ->
+    changes_since(Db, StartSeq, Fun, [], Acc).
+    
+changes_since(Db, StartSeq, Fun, Options, Acc) ->
     Wrapper = fun(FullDocInfo, _Offset, Acc2) ->
             case FullDocInfo of
             #full_doc_info{} ->
@@ -998,17 +1001,7 @@ changes_since(Db, Style, StartSeq, Fun, Options, Acc) ->
             #doc_info{} ->
                 DocInfo = FullDocInfo
             end,
-            #doc_info{revs=Revs} = DocInfo,
-            DocInfo2 =
-            case Style of
-            main_only ->
-                DocInfo;
-            all_docs ->
-                % remove revs before the seq
-                DocInfo#doc_info{revs=[RevInfo ||
-                    #rev_info{seq=RevSeq}=RevInfo <- Revs, StartSeq < RevSeq]}
-            end,
-            Fun(DocInfo2, Acc2)
+            Fun(DocInfo, Acc2)
         end,
     {ok, _LastReduction, AccOut} = couch_btree:fold(Db#db.seq_tree, Wrapper,
         Acc, [{start_key, couch_util:to_integer(StartSeq) + 1} | Options]),
@@ -1028,7 +1021,8 @@ enum_docs_since(Db, SinceSeq, InFun, Acc, Options) ->
     {ok, enum_docs_since_reduce_to_count(LastReduction), AccOut}.
 
 enum_docs(Db, InFun, InAcc, Options) ->
-    {ok, LastReduce, OutAcc} = couch_btree:fold(Db#db.id_tree, InFun, InAcc, Options),
+    {ok, LastReduce, OutAcc} = couch_view:fold(
+        #view{btree=Db#db.id_tree}, InFun, InAcc, Options),
     {ok, enum_docs_reduce_to_count(LastReduce), OutAcc}.
 
 %%% Internal function %%%

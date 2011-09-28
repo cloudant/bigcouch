@@ -106,13 +106,15 @@ get_fun_key(DDoc, Type, Name) ->
 %     send_method_not_allowed(Req, "POST,PUT,DELETE,ETC");
     
 handle_doc_update_req(#httpd{
-        path_parts=[_, _, _, _, UpdateName, DocId]
+        path_parts=[_, _, _, _, UpdateName, DocId|Rest]
     }=Req, Db, DDoc) ->
-    Doc = try couch_httpd_db:couch_doc_open(Db, DocId, nil, [conflicts])
+    DocParts = [DocId|Rest],
+    DocId1 = ?l2b(string:join([?b2l(P)|| P <- DocParts], "/")),
+    Doc = try couch_httpd_db:couch_doc_open(Db, DocId1, nil, [conflicts])
     catch
       _ -> nil
     end,
-    send_doc_update_response(Req, Db, DDoc, UpdateName, Doc, DocId);
+    send_doc_update_response(Req, Db, DDoc, UpdateName, Doc, DocId1);
 
 handle_doc_update_req(#httpd{
         path_parts=[_, _, _, _, UpdateName]
@@ -190,14 +192,14 @@ handle_view_list_req(Req, _Db, _DDoc) ->
 handle_view_list(Req, Db, DDoc, LName, {ViewDesignName, ViewName}, Keys) ->
     ViewDesignId = <<"_design/", ViewDesignName/binary>>,
     {ViewType, View, Group, QueryArgs} = couch_httpd_view:load_view(Req, Db, {ViewDesignId, ViewName}, Keys),
-    Etag = list_etag(Req, Db, Group, View, {couch_httpd:doc_etag(DDoc), Keys}),
+    Etag = list_etag(Req, Db, Group, View, QueryArgs, {couch_httpd:doc_etag(DDoc), Keys}),
     couch_httpd:etag_respond(Req, Etag, fun() ->
             output_list(ViewType, Req, Db, DDoc, LName, View, QueryArgs, Etag, Keys, Group)
         end).
 
-list_etag(#httpd{user_ctx=UserCtx}=Req, Db, Group, View, More) ->
+list_etag(#httpd{user_ctx=UserCtx}=Req, Db, Group, View, QueryArgs, More) ->
     Accept = couch_httpd:header_value(Req, "Accept"),
-    couch_httpd_view:view_etag(Db, Group, View, {More, Accept, UserCtx#user_ctx.roles}).
+    couch_httpd_view:view_etag(Db, Group, View, QueryArgs, {More, Accept, UserCtx#user_ctx.roles}).
 
 output_list(map, Req, Db, DDoc, LName, View, QueryArgs, Etag, Keys, Group) ->
     output_map_list(Req, Db, DDoc, LName, View, QueryArgs, Etag, Keys, Group);

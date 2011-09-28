@@ -15,6 +15,7 @@
 -export([open/2, open/3, query_modify/4, add/2, add_remove/3]).
 -export([fold/4, full_reduce/1, final_reduce/2, foldl/3, foldl/4]).
 -export([fold_reduce/4, lookup/2, get_state/1, set_options/2]).
+-export([less/3]).
 
 -record(btree,
     {fd,
@@ -109,9 +110,17 @@ full_reduce(#btree{root={_P, Red}, reduce=Reduce}) ->
 
 % wraps a 2 arity function with the proper 3 arity function
 convert_fun_arity(Fun) when is_function(Fun, 2) ->
-    fun(KV, _Reds, AccIn) -> Fun(KV, AccIn) end;
+    fun
+        (visit, KV, _Reds, AccIn) -> Fun(KV, AccIn);
+        (traverse, _K, _Red, AccIn) -> {ok, AccIn}
+    end;
 convert_fun_arity(Fun) when is_function(Fun, 3) ->
-    Fun.    % Already arity 3
+    fun
+        (visit, KV, Reds, AccIn) -> Fun(KV, Reds, AccIn);
+        (traverse, _K, _Red, AccIn) -> {ok, AccIn}
+    end;
+convert_fun_arity(Fun) when is_function(Fun, 4) ->
+    Fun.    % Already arity 4
 
 make_key_in_end_range_function(Bt, fwd, Options) ->
     case couch_util:get_value(end_key_gt, Options) of
@@ -614,12 +623,17 @@ stream_node(Bt, Reds, {Pointer, _Reds}, InRange, Dir, Fun, Acc) ->
 
 stream_kp_node(_Bt, _Reds, [], _InRange, _Dir, _Fun, Acc) ->
     {ok, Acc};
-stream_kp_node(Bt, Reds, [{_Key, {Pointer, Red}} | Rest], InRange, Dir, Fun, Acc) ->
-    case stream_node(Bt, Reds, {Pointer, Red}, InRange, Dir, Fun, Acc) of
+stream_kp_node(Bt, Reds, [{Key, {Pointer, Red}} | Rest], InRange, Dir, Fun, Acc) ->
+    case Fun(traverse, Key, Red, Acc) of
     {ok, Acc2} ->
-        stream_kp_node(Bt, [Red | Reds], Rest, InRange, Dir, Fun, Acc2);
-    {stop, LastReds, Acc2} ->
-        {stop, LastReds, Acc2}
+        case stream_node(Bt, Reds, {Pointer, Red}, InRange, Dir, Fun, Acc2) of
+        {ok, Acc3} ->
+            stream_kp_node(Bt, [Red | Reds], Rest, InRange, Dir, Fun, Acc3);
+        {stop, LastReds, Acc3} ->
+            {stop, LastReds, Acc3}
+        end;
+    {skip, Acc2} ->
+        stream_kp_node(Bt, [Red | Reds], Rest, InRange, Dir, Fun, Acc2)
     end.
 
 drop_nodes(_Bt, Reds, _StartKey, []) ->
@@ -680,7 +694,7 @@ stream_kv_node2(Bt, Reds, PrevKVs, [{K,V} | RestKVs], InRange, Dir, Fun, Acc) ->
         {stop, {PrevKVs, Reds}, Acc};
     true ->
         AssembledKV = assemble(Bt, K, V),
-        case Fun(AssembledKV, {PrevKVs, Reds}, Acc) of
+        case Fun(visit, AssembledKV, {PrevKVs, Reds}, Acc) of
         {ok, Acc2} ->
             stream_kv_node2(Bt, Reds, [AssembledKV | PrevKVs], RestKVs, InRange, Dir, Fun, Acc2);
         {stop, Acc2} ->

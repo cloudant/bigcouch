@@ -25,22 +25,12 @@
 -define(LEVEL_TMI, 0).
 
 debug(Format, Args) ->
-    case debug_on() of
-    false ->
-        ok;
-    true ->
-        {ConsoleMsg, FileMsg} = get_log_messages(self(), debug, Format, Args),
-        gen_event:sync_notify(error_logger, {couch_debug, ConsoleMsg, FileMsg})
-    end.
+    {ConsoleMsg, FileMsg} = get_log_messages(self(), debug, Format, Args),
+    gen_event:sync_notify(error_logger, {couch_debug, ConsoleMsg, FileMsg}).
 
 info(Format, Args) ->
-    case info_on() of
-    false ->
-        ok;
-    true ->
-        {ConsoleMsg, FileMsg} = get_log_messages(self(), info, Format, Args),
-        gen_event:sync_notify(error_logger, {couch_info, ConsoleMsg, FileMsg})
-    end.
+    {ConsoleMsg, FileMsg} = get_log_messages(self(), info, Format, Args),
+    gen_event:sync_notify(error_logger, {couch_info, ConsoleMsg, FileMsg}).
 
 error(Format, Args) ->
     {ConsoleMsg, FileMsg} = get_log_messages(self(), error, Format, Args),
@@ -180,6 +170,15 @@ get_log_messages(Pid, Level, Format, Args) ->
 read(Bytes, Offset) ->
     LogFileName = couch_config:get("log", "file"),
     LogFileSize = filelib:file_size(LogFileName),
+    MaxChunkSize = list_to_integer(
+        couch_config:get("httpd", "log_max_chunk_size", "1000000")),
+    case Bytes > MaxChunkSize of
+    true ->
+        throw({bad_request, "'bytes' cannot exceed " ++
+            integer_to_list(MaxChunkSize)});
+    false ->
+        ok
+    end,
 
     {ok, Fd} = file:open(LogFileName, [read]),
     Start = lists:max([LogFileSize - Bytes, 0]) + Offset,
@@ -188,4 +187,5 @@ read(Bytes, Offset) ->
     % TODO: make streaming
 
     {ok, Chunk} = file:pread(Fd, Start, LogFileSize),
+    ok = file:close(Fd),
     Chunk.

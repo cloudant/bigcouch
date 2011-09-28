@@ -12,29 +12,35 @@
 
 -module(couch_view_updater).
 
--export([update/2, do_maps/4, do_writes/5, load_docs/3]).
+-export([update/3, do_maps/4, do_writes/5, load_docs/3]).
 
 -include("couch_db.hrl").
 
--spec update(_, #group{}) -> no_return().
+-spec update(_, #group{}, Dbname::binary()) -> no_return().
 
-update(Owner, Group) ->
+update(Owner, Group, DbName) when is_binary(DbName) ->
+    {ok, Db} = couch_db:open_int(DbName, []),
+    try
+        update(Owner, Group, Db)
+    after
+        couch_db:close(Db)
+    end;
+
+update(Owner, Group, #db{name = DbName} = Db) ->
     #group{
-        dbname = DbName,
         name = GroupName,
         current_seq = Seq,
         purge_seq = PurgeSeq
     } = Group,
     couch_task_status:add_task(<<"View Group Indexer">>, <<DbName/binary," ",GroupName/binary>>, <<"Starting index update">>),
 
-    {ok, Db} = couch_db:open(DbName, []),
     DbPurgeSeq = couch_db:get_purge_seq(Db),
     Group2 =
     if DbPurgeSeq == PurgeSeq ->
         Group;
     DbPurgeSeq == PurgeSeq + 1 ->
         couch_task_status:update(<<"Removing purged entries from view index.">>),
-        purge_index(Db, Group);
+        purge_index(Group, Db);
     true ->
         couch_task_status:update(<<"Resetting view index due to lost purge entries.">>),
         exit(reset)
@@ -77,7 +83,7 @@ load_docs(DocInfo, _, {I, Db, MapQueue, DocOpts, IncludeDesign, Total} = Acc) ->
     load_doc(Db, DocInfo, MapQueue, DocOpts, IncludeDesign),
     {ok, setelement(1, Acc, I+1)}.
 
-purge_index(Db, #group{views=Views, id_btree=IdBtree}=Group) ->
+purge_index(#group{views=Views, id_btree=IdBtree}=Group, Db) ->
     {ok, PurgedIdsRevs} = couch_db:get_last_purged(Db),
     Ids = [Id || {Id, _Revs} <- PurgedIdsRevs],
     {ok, Lookups, IdBtree2} = couch_btree:query_modify(IdBtree, Ids, [], Ids),
@@ -133,7 +139,7 @@ load_doc(Db, DI, MapQueue, DocOpts, IncludeDesign) ->
             couch_work_queue:queue(MapQueue, {Seq, Doc})
         end
     end.
-
+    
 -spec do_maps(#group{}, pid(), pid(), any()) -> any().
 do_maps(Group, MapQueue, WriteQueue, ViewEmptyKVs) ->
     case couch_work_queue:dequeue(MapQueue) of
@@ -162,10 +168,10 @@ do_writes(Parent, Owner, Group, WriteQueue, InitialBuild) ->
         if Go =:= stop ->
             Parent ! {new_group, Group2};
         true ->
-            case Owner of
-            nil -> ok;
-            _ -> ok = gen_server:cast(Owner, {partial_update, Parent, Group2})
-            end,
+        case Owner of
+        nil -> ok;
+        _ -> ok = gen_server:cast(Owner, {partial_update, Parent, Group2})
+        end,
             ?MODULE:do_writes(Parent, Owner, Group2, WriteQueue, InitialBuild)
         end
     end.
