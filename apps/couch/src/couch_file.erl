@@ -25,7 +25,8 @@
 
 -export([open/1, open/2, close/1, bytes/1, sync/1, append_binary/2,old_pread/3]).
 -export([append_term/2, pread_term/2, pread_iolist/2, write_header/2]).
--export([pread_binary/2, read_header/1, truncate/2, upgrade_old_header/2]).
+-export([pread_binary/2, read_header/1, read_header_at/2,
+         truncate/2, upgrade_old_header/2]).
 -export([append_term_md5/2,append_binary_md5/2]).
 -export([init/1, terminate/2, handle_call/3, handle_cast/2, code_change/3, handle_info/2]).
 -export([delete/2,delete/3,init_delete_dir/1]).
@@ -223,6 +224,14 @@ read_header(Fd) ->
         Else
     end.
 
+read_header_at(Fd, Pos) ->
+    case gen_server:call(Fd, {find_header_at, Pos}, infinity) of
+    {ok, Bin} ->
+        {ok, binary_to_term(Bin)};
+    Else ->
+        Else
+    end.
+
 write_header(Fd, Data) ->
     Bin = term_to_binary(Data),
     Md5 = couch_util:md5(Bin),
@@ -377,7 +386,11 @@ handle_call({upgrade_old_header, Prefix}, _From, #file{fd=Fd}=File) ->
 
 
 handle_call(find_header, _From, #file{fd=Fd, eof=Pos}=File) ->
-    {reply, find_header(Fd, Pos div ?SIZE_BLOCK), File}.
+    {reply, find_header(Fd, Pos div ?SIZE_BLOCK), File};
+
+handle_call({find_header_at, Pos}, _From, #file{fd=Fd}=File) ->
+    Block = Pos div ?SIZE_BLOCK + 1,
+    {reply, load_header(Fd, Block), File}.
 
 % 09 UPGRADE CODE
 -define(HEADER_SIZE, 2048). % size of each segment of the doubly written header

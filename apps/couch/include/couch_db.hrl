@@ -133,7 +133,10 @@
      purge_seq = 0,
      purged_docs = nil,
      security_ptr = nil,
-     revs_limit = 1000
+     revs_limit = 1000,
+     snapshot_id = 0,
+     snapshot_curr = nil,
+     snapshot_prev = nil
     }).
 
 -record(db,
