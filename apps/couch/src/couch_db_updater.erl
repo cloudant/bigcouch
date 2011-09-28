@@ -922,11 +922,11 @@ copy_compact_snapshot(DbSs, NewDb, Retry, TotalChanges) ->
             couch_task_status:update(
               "Copied ~p of ~p changes (~p%)",
               [TotalCopied, TotalChanges, (TotalCopied*100) div TotalChanges]),
-            if TotalCopied rem 1000 =:= 0 ->
+            if (TotalCopied + 1) rem 1000 =:= 0 ->
                 NewDb2 =
                     copy_docs(DbSs, AccNewDb,
                               lists:reverse([DocInfo | AccUncopied]), Retry),
-                if TotalCopied rem 10000 =:= 0 ->
+                if (TotalCopied + 1) rem 10000 =:= 0 ->
                     NewDb3 = commit_data(NewDb2#db{update_seq=Seq}),
                     {ok, {NewDb3, [], TotalCopied + 1}};
                    true ->
