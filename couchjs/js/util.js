@@ -46,7 +46,7 @@ var resolveModule = function(names, mod, root) {
   } else if (root) {
     mod = {current : root};
   }
-  if (!mod.current[n]) {
+  if (mod.current[n] === undefined) {
     throw ["error", "invalid_require_path", 'Object has no property "'+n+'". '+JSON.stringify(mod.current)];
   }
   return resolveModule(names, {
@@ -63,6 +63,11 @@ var Couch = {
   },
   compileFunction : function(source, ddoc) {    
     if (!source) throw(["error","not_found","missing function"]);
+    // Some newer SpiderMonkey's appear to not like evaluating
+    // an anonymous function at global scope. Simple fix just
+    // wraps the source with parens so the function object is
+    // returned correctly.
+    source = "(" + source + ")";
     try {
       if (sandbox) {
         if (ddoc) {
