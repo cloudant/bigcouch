@@ -221,6 +221,16 @@ handle_call({compact_done, NewGroup}, _From, State) ->
         "compact: ~p", [DbName, GroupId, CurrentSeq, NewGroup#group.current_seq]),
     {reply, update, State}.
 
+handle_cast({update_group, RequestSeq},
+        #group_state{
+            group=#group{current_seq=Seq}=Group,
+            updater_pid=nil}=State) when RequestSeq > Seq ->
+    Owner = self(),
+    Pid = spawn_link(fun()-> couch_view_updater:update(Owner, Group) end),
+    {noreply, State#group_state{updater_pid=Pid}};
+handle_cast({update_group, _RequestSeq}, State) ->
+    {noreply, State};
+
 handle_cast({partial_update, Pid, NewGroup}, #group_state{updater_pid=Pid}
         = State) ->
     #group_state{
