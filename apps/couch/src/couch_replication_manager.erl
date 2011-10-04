@@ -317,7 +317,7 @@ process_update(State, {Change}) ->
         <<"error">> ->
             case ets:lookup(?DOC_TO_REP, DocId) of
             [] ->
-                maybe_start_replication(State, DocId, JsonRepDoc);
+            maybe_start_replication(State, DocId, JsonRepDoc);
             _ ->
                 State
             end

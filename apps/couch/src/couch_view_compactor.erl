@@ -20,14 +20,14 @@
 %% @doc Compacts the views.  GroupId must not include the _design/ prefix
 start_compact(DbName, GroupId) ->
     Pid = couch_view:get_group_server(DbName, <<"_design/",GroupId/binary>>),
-    gen_server:cast(Pid, {start_compact, fun compact_group/2}).
+    gen_server:call(Pid, {start_compact, fun compact_group/3}).
 
 %%=============================================================================
 %% internal functions
 %%=============================================================================
 
 %% @spec compact_group(Group, NewGroup) -> ok
-compact_group(Group, EmptyGroup) ->
+compact_group(Group, EmptyGroup, DbName) ->
     #group{
         current_seq = Seq,
         id_btree = IdBtree,
@@ -36,10 +36,8 @@ compact_group(Group, EmptyGroup) ->
     } = Group,
 
     #group{
-        dbname = DbName,
         fd = Fd,
         id_btree = EmptyIdBtree,
-        sig = Sig,
         views = EmptyViews
     } = EmptyGroup,
 
@@ -82,9 +80,26 @@ compact_group(Group, EmptyGroup) ->
         views=NewViews,
         current_seq=Seq
     },
+    maybe_retry_compact(Db, GroupId, NewGroup).
 
-    Pid = ets:lookup_element(group_servers_by_sig, {DbName, Sig}, 2),
-    gen_server:cast(Pid, {compact_done, NewGroup}).
+maybe_retry_compact(#db{name = DbName} = Db, GroupId, NewGroup) ->
+    #group{sig = Sig, fd = NewFd} = NewGroup,
+    Header = {Sig, couch_view_group:get_index_header_data(NewGroup)},
+    ok = couch_file:write_header(NewFd, Header),
+    Pid =  ets:lookup_element(group_servers_by_sig, {DbName, Sig}, 2),
+    case gen_server:call(Pid, {compact_done, NewGroup}) of
+    ok ->
+        couch_db:close(Db);
+    update ->
+        {ok, Db2} = couch_db:reopen(Db),
+        {_, Ref} = erlang:spawn_monitor(fun() ->
+            couch_view_updater:update(nil, NewGroup, Db2)
+        end),
+        receive
+        {'DOWN', Ref, _, _, {new_group, NewGroup2}} ->
+            maybe_retry_compact(Db2, GroupId, NewGroup2)
+        end
+    end.
 
 %% @spec compact_view(View, EmptyView) -> CompactView
 compact_view(View, EmptyView) ->

@@ -173,10 +173,7 @@ handle_info({Port, {exit_status, 0}}, #os_proc{port=Port}=OsProc) ->
     {stop, normal, OsProc};
 handle_info({Port, {exit_status, Status}}, #os_proc{port=Port}=OsProc) ->
     ?LOG_ERROR("OS Process died with status: ~p", [Status]),
-    {stop, {exit_status, Status}, OsProc};
-handle_info(Msg, OsProc) ->
-    ?LOG_DEBUG("OS Proc: Unknown info: ~p", [Msg]),
-    {noreply, OsProc}.
+    {stop, {exit_status, Status}, OsProc}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.

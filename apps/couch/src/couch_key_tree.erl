@@ -50,7 +50,7 @@
 -export([merge/3, find_missing/2, get_key_leafs/2,
          get_full_key_paths/2, get/2, compute_data_size/1]).
 -export([map/2, get_all_leafs/1, count_leafs/1, remove_leafs/2,
-    get_all_leafs_full/1,stem/2,map_leafs/2]).
+    get_all_leafs_full/1,stem/2,map_leafs/2, fold/3]).
 
 -include("couch_db.hrl").
 
@@ -372,6 +372,21 @@ tree_fold_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree], Acc) ->
     {stop, Acc2} ->
         Acc2
     end.
+
+fold(_Fun, Acc, []) ->
+    Acc;
+fold(Fun, Acc0, [{Pos, Tree}|Rest]) ->
+    Acc1 = fold_simple(Fun, Acc0, Pos, [Tree]),
+    fold(Fun, Acc1, Rest).
+
+fold_simple(_Fun, Acc, _Pos, []) ->
+    Acc;
+fold_simple(Fun, Acc0, Pos, [{Key, Value, SubTree} | RestTree]) ->
+    Type = if SubTree == [] -> leaf; true -> branch end,
+    Acc1 = Fun({Pos, Key}, Value, Type, Acc0),
+    Acc2 = fold_simple(Fun, Acc1, Pos+1, SubTree),
+    fold_simple(Fun, Acc2, Pos, RestTree).
+
 
 map(_Fun, []) ->
     [];

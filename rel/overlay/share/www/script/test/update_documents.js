@@ -75,6 +75,17 @@ couchTests.update_documents = function(debug) {
        }),
        "get-uuid" : stringFun(function(doc, req) {
          return [null, req.uuid];
+       }),
+       "code-n-bump" : stringFun(function(doc,req) {
+         if (!doc.counter) doc.counter = 0;
+         doc.counter += 1;
+         var message = "<h1>bumped it!</h1>";
+         resp = {"code": 302, "body": message}
+         return [doc, resp];
+       }),
+       "resp-code" : stringFun(function(doc,req) {
+         resp = {"code": 302}
+         return [null, resp];
        })
     }
   };
@@ -165,4 +176,31 @@ couchTests.update_documents = function(debug) {
   T(xhr.status == 200);
   T(xhr.responseText.length == 32);
 
+  // COUCHDB-1229 - allow slashes in doc ids for update handlers
+  // /db/_design/doc/_update/handler/doc/id
+
+  var doc = {
+      _id:"with/slash",
+      counter:1
+  };
+  db.save(doc);
+  xhr = CouchDB.request("PUT", "/test_suite_db/_design/update/_update/bump-counter/with/slash");
+  TEquals(201, xhr.status, "should return a 200 status");
+  TEquals("<h1>bumped it!</h1>", xhr.responseText, "should report bumping");
+
+  var doc = db.open("with/slash");
+  TEquals(2, doc.counter, "counter should be 2");
+
+  // COUCHDB-648 - the code in the JSON response should be honored
+
+  xhr = CouchDB.request("PUT", "/test_suite_db/_design/update/_update/code-n-bump/"+docid, {
+    headers : {"X-Couch-Full-Commit":"true"}
+  });
+  T(xhr.status == 302);
+  T(xhr.responseText == "<h1>bumped it!</h1>");
+  doc = db.open(docid);
+  T(doc.counter == 3);
+
+  xhr = CouchDB.request("POST", "/test_suite_db/_design/update/_update/resp-code/");
+  T(xhr.status == 302);
 };

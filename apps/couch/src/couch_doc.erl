@@ -302,12 +302,20 @@ to_doc_info(FullDocInfo) ->
     {DocInfo, _Path} = to_doc_info_path(FullDocInfo),
     DocInfo.
 
-max_seq([], Max) ->
-    Max;
-max_seq([#rev_info{seq=Seq}|Rest], Max) ->
-    max_seq(Rest, if Max > Seq -> Max; true -> Seq end).
+max_seq(Tree, UpdateSeq) ->
+    FoldFun = fun({_Pos, _Key}, Value, _Type, MaxOldSeq) ->
+        case Value of
+            {_Deleted, _DiskPos, OldTreeSeq} ->
+                erlang:max(MaxOldSeq, OldTreeSeq);
+            #leaf{seq=LeafSeq} ->
+                erlang:max(MaxOldSeq, LeafSeq);
+            _ ->
+                MaxOldSeq
+        end
+    end,
+    couch_key_tree:fold(FoldFun, UpdateSeq, Tree).
 
-to_doc_info_path(#full_doc_info{id=Id,rev_tree=Tree}) ->
+to_doc_info_path(#full_doc_info{id=Id,rev_tree=Tree,update_seq=FDISeq}) ->
     RevInfosAndPath =
         [{#rev_info{deleted=Del,body_sp=Bp,seq=Seq,rev={Pos,RevId}}, Path} ||
             {#leaf{deleted=Del, ptr=Bp, seq=Seq},{Pos, [RevId|_]}=Path} <-
@@ -320,7 +328,7 @@ to_doc_info_path(#full_doc_info{id=Id,rev_tree=Tree}) ->
         end, RevInfosAndPath),
     [{_RevInfo, WinPath}|_] = SortedRevInfosAndPath,
     RevInfos = [RevInfo || {RevInfo, _Path} <- SortedRevInfosAndPath],
-    {#doc_info{id=Id, high_seq=max_seq(RevInfos, 0), revs=RevInfos}, WinPath}.
+    {#doc_info{id=Id, high_seq=max_seq(Tree, FDISeq), revs=RevInfos}, WinPath}.
 
 
 

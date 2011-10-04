@@ -20,6 +20,7 @@
 -export([start_replication/4, end_replication/1, get_result/4]).
 
 -include("couch_db.hrl").
+-include("couch_js_functions.hrl").
 -include_lib("ibrowse/include/ibrowse.hrl").
 
 -define(REP_ID_VERSION, 2).
@@ -110,20 +111,20 @@ checkpoint(Server) ->
     gen_server:cast(Server, do_checkpoint).
 
 get_result(Server, {BaseId, _Extension}, {Props} = PostBody, UserCtx) ->
-        case couch_util:get_value(<<"continuous">>, Props, false) of
-        true ->
-            {ok, {continuous, ?l2b(BaseId)}};
-        false ->
-    try gen_server:call(Server, get_result, infinity) of
-    retry -> replicate(PostBody, UserCtx);
-    Else -> Else
-    catch
-    exit:{noproc, {gen_server, call, [Server, get_result , infinity]}} ->
-        %% oops, this replication just finished -- restart it.
-        replicate(PostBody, UserCtx);
-    exit:{normal, {gen_server, call, [Server, get_result , infinity]}} ->
-        %% we made the call during terminate
-        replicate(PostBody, UserCtx)
+    case couch_util:get_value(<<"continuous">>, Props, false) of
+    true ->
+        {ok, {continuous, ?l2b(BaseId)}};
+    false ->
+        try gen_server:call(Server, get_result, infinity) of
+        retry -> replicate(PostBody, UserCtx);
+        Else -> Else
+        catch
+        exit:{noproc, {gen_server, call, [Server, get_result, infinity]}} ->
+            %% oops, this replication just finished -- restart it.
+            replicate(PostBody, UserCtx);
+        exit:{normal, {gen_server, call, [Server, get_result, infinity]}} ->
+            %% we made the call during terminate
+            replicate(PostBody, UserCtx)
         end
     end.
 
@@ -154,13 +155,13 @@ do_init([{BaseId, _Ext} = RepId, {PostProps}, UserCtx, Module] = InitArgs) ->
 
     [SourceLog, TargetLog] = find_replication_logs(
         [Source, Target], BaseId, {PostProps}, UserCtx),
-        {StartSeq, History} = compare_replication_logs(SourceLog, TargetLog),
+    {StartSeq, History} = compare_replication_logs(SourceLog, TargetLog),
 
-        {ok, ChangesFeed} =
+    {ok, ChangesFeed} =
         couch_rep_changes_feed:start_link(self(), Source, StartSeq, PostProps),
-        {ok, MissingRevs} =
+    {ok, MissingRevs} =
         couch_rep_missing_revs:start_link(self(), Target, ChangesFeed, PostProps),
-        {ok, Reader} =
+    {ok, Reader} =
         couch_rep_reader:start_link(self(), Source, MissingRevs, PostProps),
     {ok, Writer} =
     couch_rep_writer:start_link(self(), Target, Reader, PostProps),
@@ -545,7 +546,7 @@ filter_code(Filter, Props, UserCtx) ->
             DocErrorMsg = io_lib:format(
                 "Couldn't open document `_design/~s` from source "
                 "database `~s`: ~s",
-                [dbname(Source), DDocName, couch_util:to_binary(DocError)]),
+                [DDocName, dbname(Source), couch_util:to_binary(DocError)]),
             throw({error, iolist_to_binary(DocErrorMsg)})
         end,
         Code = couch_util:get_nested_json_value(
@@ -649,18 +650,18 @@ open_db(<<"https://",_/binary>>=Url, _, ProxyParams, CreateTarget) ->
     open_db({[{<<"url">>,Url}]}, [], ProxyParams, CreateTarget);
 open_db(<<DbName/binary>>, UserCtx, _ProxyParams, CreateTarget) ->
     try
-    case CreateTarget of
-    true ->
-        ok = couch_httpd:verify_is_server_admin(UserCtx),
-        couch_server:create(DbName, [{user_ctx, UserCtx}]);
+        case CreateTarget of
+        true ->
+            ok = couch_httpd:verify_is_server_admin(UserCtx),
+            couch_server:create(DbName, [{user_ctx, UserCtx}]);
         false ->
             ok
-    end,
+        end,
 
-    case couch_db:open(DbName, [{user_ctx, UserCtx}]) of
-    {ok, Db} ->
-        couch_db:monitor(Db),
-        Db;
+        case couch_db:open(DbName, [{user_ctx, UserCtx}]) of
+        {ok, Db} ->
+            couch_db:monitor(Db),
+            Db;
         {not_found, no_db_file} ->
             throw({db_not_found, DbName})
         end

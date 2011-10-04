@@ -216,15 +216,19 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
+append_path("/"=_Target, "/"=_Path) ->
+    "/";
+append_path(Target, Path) ->
+    Target ++ Path.
 
 % default redirect vhost handler 
 
 redirect_to_vhost(MochiReq, VhostTarget) ->
     Path = MochiReq:get(raw_path),
-    Target = VhostTarget ++ Path,
+    Target = append_path(VhostTarget, Path),
 
     ?LOG_DEBUG("Vhost Target: '~p'~n", [Target]),
-    
+
     Headers = mochiweb_headers:enter("x-couchdb-vhost-path", Path, 
         MochiReq:get(headers)),
 
@@ -356,8 +360,8 @@ split_host_port(HostAsString) ->
             {split_host(HostAsString), '*'};
         N ->
             HostPart = string:substr(HostAsString, 1, N-1), 
-            case (catch erlang:list_to_integer(HostAsString, N+1,
-                        length(HostAsString))) of
+            case (catch erlang:list_to_integer(string:substr(HostAsString,
+                            N+1, length(HostAsString)))) of
                 {'EXIT', _} ->
                     {split_host(HostAsString), '*'};
                 Port ->

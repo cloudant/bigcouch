@@ -17,9 +17,9 @@
 -export([filter_docs/5]).
 
 -export([with_ddoc_proc/2, proc_prompt/2, ddoc_prompt/3, ddoc_proc_prompt/3, json_doc/1]).
--export([get_os_process/1, ret_os_process/1]).
 
-% -export([test/0]).
+% For 210-os-proc-pool.t
+-export([get_os_process/1, ret_os_process/1]).
 
 -include("couch_db.hrl").
 
