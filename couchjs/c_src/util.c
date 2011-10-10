@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "help.h"
 #include "util.h"
 #include "utf8.h"
 
@@ -77,15 +78,30 @@ couch_parse_args(int argc, const char* argv[])
     args->stack_size = 8L * 1024L;
 
     while(i < argc) {
-        if(strcmp("--http", argv[i]) == 0) {
+        if(strcmp("-h", argv[i]) == 0) {
+            DISPLAY_USAGE;
+            exit(0);
+        } else if(strcmp("-V", argv[i]) == 0) {
+            DISPLAY_VERSION;
+            exit(0);
+        } else if(strcmp("-H", argv[i]) == 0) {
             args->use_http = 1;
-        } else if(strcmp("--stack-size", argv[i]) == 0) {
-            args->stack_size = atoi(argv[i+1]);
+        } else if(strcmp("-S", argv[i]) == 0) {
+            args->stack_size = atoi(argv[++i]);
             if(args->stack_size <= 0) {
                 fprintf(stderr, "Invalid stack size.\n");
                 exit(2);
             }
+        } else if(strcmp("--", argv[i]) == 0) {
+            i++;
+            break;
         } else {
+            break;
+        }
+        i++;
+    }
+
+    while(i < argc) {
             args->script = slurp_file(args->script, argv[i]);
             if(args->script_name == NULL) {
                 if(strcmp(argv[i], "-") == 0) {
@@ -96,12 +112,11 @@ couch_parse_args(int argc, const char* argv[])
             } else {
                 args->script_name = "<multiple_files>";
             }
-        }
         i++;
     }
 
     if(args->script_name == NULL || args->script == NULL) {
-        fprintf(stderr, "No script provided.\n");
+        DISPLAY_USAGE;
         exit(3);
     }
 
