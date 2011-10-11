@@ -13,7 +13,6 @@
 # the License.
 import os
 import commands
-import subprocess
 
 def require_lib(name):
     if not conf.CheckLib(name):
@@ -89,7 +88,7 @@ if not env.GetOption('clean'):
 
     ## Define properties for -h / -V
 
-    vsn = subprocess.check_output(["git","describe","--match","1.*"])
+    (_, vsn) = runcmd("git describe --match 1.*")
     conf.Define("PACKAGE_STRING", '"%s"' % vsn.rstrip())
     conf.Define("PACKAGE_NAME", '"Cloudant BigCouch"')
     conf.Define("PACKAGE_BUGREPORT", '"https://github.com/cloudant/bigcouch/issues"')
