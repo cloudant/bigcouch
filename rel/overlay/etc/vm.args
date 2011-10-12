@@ -4,10 +4,15 @@
 # with the -name flag.
 {{node_name}}
 
-# All nodes must share the same magic cookie for distributed Erlang to work.
-# Comment out this line if you synchronized the cookies by other means (using
-# the ~/.erlang.cookie file, for example).
--setcookie monster
+# If you passed a value for the cookie to ./configure it will be set here.
+# Otherwise it will default to using ~/.erlang.cookie which will be generated
+# automatically if it doesn't exist.
+#
+# Note that you need to make sure that the cookie value used is synchronized
+# across all nodes in the cluster. This means that if you don't set the
+# cookie by hand you need to manually sync ~/.erlang.cookie across all nodes
+# in the cluster.
+{{cookie}}
 
 # Tell SASL not to log progress reports
 -sasl errlog_type error

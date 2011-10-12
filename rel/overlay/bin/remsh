@@ -12,15 +12,16 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-if test ! $1 ; then
-    echo "usage: $0 nodename"
-    exit 1
-fi
+NAME="remsh$$"
+REM_NODE="{{node_name}}"
+NAME_TYPE=${REM_NODE% *}
+REM_NODE=${REM_NODE#* }
+HOST=`echo "$REM_NODE" | grep -o "@.*" | sed 's/@//'`
 
-if test `echo $1 | sed 's/[^@]//g'`; then
-    NAME="-name $1"
+if test -n $HOST; then
+    NAME="$NAME_TYPE $NAME@$HOST"
 else
-    NAME="-sname $1"
+    NAME="$NAME_TYPE $NAME"
 fi
 
 ERTS_BIN_DIR=$(cd ${0%/*} && pwd)
@@ -33,9 +34,6 @@ START_CLEAN="${ROOTDIR}/releases/${APP_VSN}/start_clean"
 
 BINDIR=$ROOTDIR/erts-$ERTS_VSN/bin
 
-REM_NODE="{{node_name}}"
-REM_NODE=${REM_NODE#* }
-
-COOKIE="-setcookie monster"
+COOKIE="{{cookie}}"
 
 exec $BINDIR/erl $NAME -remsh $REM_NODE $COOKIE -hidden -boot $START_CLEAN
