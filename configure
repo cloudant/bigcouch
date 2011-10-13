@@ -44,8 +44,12 @@ do
       BIGCOUCH_USER=$2
       shift 2
     ;;
+    -c)
+      COOKIE=$2
+      shift 2
+    ;;
     *)
-      echo "usage: $0 [-p {prefix} -t {template} -d {data_dir} -v {view_dir} -u {user}]"
+      echo "usage: $0 [-p {prefix} -t {template} -d {data_dir} -v {view_dir} -u {user} -c {cookie}]"
       exit
     ;;
   esac
@@ -53,6 +57,7 @@ done
 
 if test ! -n "$DATA"; then DATA="$PREFIX/var/lib"; fi
 if test ! -n "$VIEW"; then VIEW="$PREFIX/var/lib"; fi
+if test -n "$COOKIE"; then COOKIE="-setcookie $COOKIE"; fi
 
 echo "==> configuring bigcouch in rel/bigcouch.config"
 cat > rel/bigcouch.config << EOF
@@ -61,6 +66,7 @@ cat > rel/bigcouch.config << EOF
 {view_dir, "$VIEW"}.
 {user, "$BIGCOUCH_USER"}.
 {node_name, "-name bigcouch"}.
+{cookie, "$COOKIE"}.
 {cluster_port, 5984}.
 {cluster_ssl, 6984}.
 {backend_port, 5986}.
@@ -81,6 +87,7 @@ cat > rel/dev$i.config << EOF
 {data_dir, "$DIRPATH/rel/tmpdata/dev$i"}.
 {view_dir, "$DIRPATH/rel/tmpdata/dev$i"}.
 {node_name, "-name dev$i@127.0.0.1"}.
+{cookie, "$COOKIE"}.
 {cluster_port, `expr 10000 \* $i + 5984`}.
 {cluster_ssl, `expr 10000 \* $i + 6984`}.
 {backend_port, `expr 10000 \* $i + 5986`}.
