@@ -199,16 +199,28 @@ try_close_lru(StartTime) ->
         % There may exist an extremely small possibility of a race
         % condition here, if a process could lookup the DB before the lock,
         % but fail to monitor the fd before the is_idle check.
-        true = ets:update_element(couch_dbs, DbName, {#db.fd_monitor, locked}),
-        [#db{main_pid = Pid} = Db] = ets:lookup(couch_dbs, DbName),
-        case couch_db:is_idle(Db) of true ->
-            true = ets:delete(couch_dbs, DbName),
-            true = ets:delete(couch_lru, DbName),
-            exit(Pid, kill),
-            ok;
+        %
+        % If we do hit this race condition the behavior is that the process
+        % grabbing the database will end up inserting a value into the
+        % couch_lru table. Its possible that we end up picking that up
+        % as the DbName above to close. So we here we'll just remove the
+        % couch_lru entry and ignore it.
+        case ets:update_element(couch_dbs, DbName, {#db.fd_monitor, locked}) of
+        true ->
+            [#db{main_pid = Pid} = Db] = ets:lookup(couch_dbs, DbName),
+            case couch_db:is_idle(Db) of true ->
+                true = ets:delete(couch_dbs, DbName),
+                true = ets:delete(couch_lru, DbName),
+                exit(Pid, kill),
+                ok;
+            false ->
+                Update = {#db.fd_monitor, nil},
+                true = ets:update_element(couch_dbs, DbName, Update),
+                true = ets:insert(couch_lru, {DbName, now()}),
+                try_close_lru(StartTime)
+            end;
         false ->
-            true = ets:update_element(couch_dbs, DbName, {#db.fd_monitor, nil}),
-            true = ets:insert(couch_lru, {DbName, now()}),
+            true = ets:delete(couch_lru, DbName),
             try_close_lru(StartTime)
         end
     end.
