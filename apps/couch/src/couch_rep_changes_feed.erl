@@ -64,7 +64,7 @@ init([Parent, #http_db{headers = Headers0} = Source, Since, PostProps]) ->
     BaseQS = [
         {"style", all_docs},
         {"heartbeat", 10000},
-        {"since", Since},
+        {"since", iolist_to_binary(?JSON_ENCODE(Since))},
         {"feed", Feed}
     ],
     {QS, Method, Body, Headers} = case get_value(<<"doc_ids">>, PostProps) of
