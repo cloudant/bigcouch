@@ -24,6 +24,7 @@ compile:
 clean:
 	@echo "==> couchjs (clean)"
 	@cd couchjs && python scons/scons.py --clean
+	@rm -rf couchjs/.sconf_temp couchjs/.sconsign.dblite
 	@./rebar clean
 
 # compile is required here because of cross-dependencies between apps
