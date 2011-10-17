@@ -22,7 +22,7 @@ def require_lib(name):
 def runcmd(cmd):
     return commands.getstatusoutput(cmd)
 
-env = Environment(CCFLAGS='-g -O2 -DXP_UNIX')
+env = Environment(CC="c++", CCFLAGS='-g -O2 -DXP_UNIX')
 
 if os.uname()[0] == 'SunOS':
    env['CC'] = '/usr/sfw/bin/gcc'
