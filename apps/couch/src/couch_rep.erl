@@ -834,7 +834,7 @@ ensure_full_commit(#http_db{headers = Headers} = Source, RequiredSeq) ->
     Req = Source#http_db{
         resource = "_ensure_full_commit",
         method = post,
-        qs = [{seq, RequiredSeq}],
+        qs = [{seq, iolist_to_binary(?JSON_ENCODE(RequiredSeq))}],
         headers = Headers1
     },
     {ResultProps} = couch_rep_httpc:request(Req),
