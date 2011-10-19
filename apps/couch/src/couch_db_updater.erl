@@ -362,23 +362,37 @@ btree_by_id_join(Id, {HighSeq, Deleted, Size, DiskTree}) ->
 
 btree_by_id_reduce(reduce, FullDocInfos) ->
     lists:foldl(
-        fun(#full_doc_info{deleted = false, data_size=Size},
-            {NotDeleted, Deleted, DocSize}) ->
-                {NotDeleted + 1, Deleted, DocSize + Size};
-           (#full_doc_info{deleted = true, data_size=Size},
-            {NotDeleted, Deleted, DocSize}) ->
-                {NotDeleted, Deleted + 1, DocSize + Size}
+        fun(#full_doc_info{deleted = false, rev_tree = Tree, data_size=Size},
+            {NotDeleted, Deleted, Conflicts, DocSize}) ->
+                {NotDeleted + 1, Deleted,
+                 Conflicts + case has_conflicts(Tree) of
+                             true -> 1;
+                             false -> 0
+                             end,
+                 DocSize + Size};
+           (#full_doc_info{deleted = true, rev_tree = Tree, data_size=Size},
+            {NotDeleted, Deleted, Conflicts, DocSize}) ->
+                {NotDeleted, Deleted + 1,
+                 Conflicts + case has_conflicts(Tree) of
+                             true -> 1;
+                             false -> 0
+                             end,
+                 DocSize + Size}
         end,
-        {0, 0, 0}, FullDocInfos);
+        {0, 0, 0, 0}, FullDocInfos);
 
-btree_by_id_reduce(rereduce, Reductions) ->
+btree_by_id_reduce(rereduce, [FirstRed | RestReds]) ->
     lists:foldl(
         fun({NotDeleted, Deleted}, {AccNotDeleted, AccDeleted, AccDocSizes}) ->
-            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, AccDocSizes};
-           ({NotDeleted, Deleted, DocSizes}, {AccNotDeleted, AccDeleted, AccDocSizes}) ->
-            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, DocSizes + AccDocSizes}
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, 0, AccDocSizes};
+           ({NotDeleted, Deleted, DocSizes}, {AccNotDeleted, AccDeleted, AccConflicts, AccDocSizes}) ->
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, AccConflicts, DocSizes + AccDocSizes};
+           ({NotDeleted, Deleted, Conflicts, DocSizes},
+            {AccNotDeleted, AccDeleted, AccConflicts, AccDocSizes}) ->
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted,
+             Conflicts + AccConflicts, DocSizes + AccDocSizes}
         end,
-        {0, 0, 0}, Reductions).
+        FirstRed, RestReds).
 
 btree_by_seq_reduce(reduce, DocInfos) ->
     % count the number of documents
@@ -458,6 +472,8 @@ init_db(DbName, Filepath, Fd, Header0) ->
 close_db(#db{fd_monitor = Ref}) ->
     erlang:demonitor(Ref).
 
+has_conflicts(RevTree) ->
+    couch_key_tree:has_conflicts(RevTree).
 
 refresh_validate_doc_funs(Db) ->
     {ok, DesignDocs} = couch_db:get_design_docs(Db),

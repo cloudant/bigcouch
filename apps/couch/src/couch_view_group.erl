@@ -530,8 +530,12 @@ get_group_info(State) ->
 
 compute_data_size(ViewList) ->
     lists:foldl(fun(#view{btree=Btree}, Acc) ->
-        {ok, {_, _, Size}} = couch_btree:full_reduce(Btree),
-        Size + Acc
+        case couch_btree:full_reduce(Btree) of
+        {ok, {_, _, _, NSize}} ->
+            NSize + Acc;
+        {ok, {_, _, OSize}} ->
+            OSize + Acc
+        end
     end, 0, ViewList).
 
 

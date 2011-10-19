@@ -256,8 +256,12 @@ get_last_purged(#db{fd=Fd, header=#db_header{purged_docs=PurgedPointer}}) ->
     couch_file:pread_term(Fd, PurgedPointer).
 
 get_doc_count(Db) ->
-    {ok, {Count, _, _}}  = couch_btree:full_reduce(Db#db.id_tree),
-    {ok, Count}.
+    case couch_btree:full_reduce(Db#db.id_tree) of
+    {ok, {OCount, _, _}} ->
+        {ok, OCount};
+    {ok, {NCount, _, _, _}} ->
+        {ok, NCount}
+    end.
 
 get_db_info(Db) ->
     #db{fd=Fd,
@@ -269,11 +273,16 @@ get_db_info(Db) ->
         instance_start_time=StartTime,
         committed_update_seq=CommittedUpdateSeq} = Db,
     {ok, Size} = couch_file:bytes(Fd),
-    {ok, {Count, DelCount, DataSize}} = couch_btree:full_reduce(FullDocBtree),
+    {ok, {Count, DelCount, Conflicts, DataSize}} =
+        case couch_btree:full_reduce(FullDocBtree) of
+        {ok, {_,_,_,_}} = New -> New;
+        {ok, {C,De,Da}} -> {ok, {C,De,0,Da}}
+        end,
     InfoList = [
         {db_name, Name},
         {doc_count, Count},
         {doc_del_count, DelCount},
+        {conflicts_count, Conflicts},
         {update_seq, SeqNum},
         {purge_seq, couch_db:get_purge_seq(Db)},
         {compact_running, Compactor/=nil},
@@ -986,9 +995,11 @@ enum_docs_since_reduce_to_count(Reds) ->
             fun couch_db_updater:btree_by_seq_reduce/2, Reds).
 
 enum_docs_reduce_to_count(Reds) ->
-    {Count, _, _} = couch_btree:final_reduce(
-            fun couch_db_updater:btree_by_id_reduce/2, Reds),
-    Count.
+    case couch_btree:final_reduce(
+            fun couch_db_updater:btree_by_id_reduce/2, Reds) of
+    {C1, _, _} -> C1;
+    {C2, _, _, _} -> C2
+    end.
 
 changes_since(Db, StartSeq, Fun, Acc) ->
     changes_since(Db, StartSeq, Fun, [], Acc).

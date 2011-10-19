@@ -118,8 +118,10 @@ list_index_files(Db) ->
 
 
 get_row_count(#view{btree=Bt}) ->
-    {ok, {Count, _, _}} = couch_btree:full_reduce(Bt),
-    {ok, Count}.
+    case couch_btree:full_reduce(Bt) of
+    {ok, {NC, _, _, _}} -> NC;
+    {ok, {OC, _, _}} -> OC
+    end.
 
 get_temp_reduce_view(Db, Language, DesignOptions, MapSrc, RedSrc) ->
     {ok, #group{views=[View]}=Group} =
