@@ -246,7 +246,7 @@ proc_set_timeout(Proc, Timeout) ->
 
 get_ddoc_process(#doc{} = DDoc, DDocKey) ->
     % remove this case statement
-    case gen_server:call(couch_proc_manager, {get_proc, DDoc, DDocKey}) of
+    case gen_server:call(couch_proc_manager, {get_proc, DDoc, DDocKey}, infinity) of
     {ok, Proc, QueryConfig} ->
         % process knows the ddoc
         case (catch proc_prompt(Proc, [<<"reset">>, QueryConfig])) of
@@ -263,7 +263,7 @@ get_ddoc_process(#doc{} = DDoc, DDocKey) ->
     end.
 
 get_os_process(Lang) ->
-    case gen_server:call(couch_proc_manager, {get_proc, Lang}) of
+    case gen_server:call(couch_proc_manager, {get_proc, Lang}, infinity) of
     {ok, Proc, QueryConfig} ->
         case (catch proc_prompt(Proc, [<<"reset">>, QueryConfig])) of
         true ->
@@ -279,6 +279,6 @@ get_os_process(Lang) ->
     end.
 
 ret_os_process(Proc) ->
-    true = gen_server:call(couch_proc_manager, {ret_proc, Proc}),
+    true = gen_server:call(couch_proc_manager, {ret_proc, Proc}, infinity),
     catch unlink(Proc#proc.pid),
     ok.
