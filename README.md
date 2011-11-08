@@ -30,7 +30,7 @@ subscribe to [the mailing list](http://groups.google.com/group/bigcouch-user).
 
 ## Troubleshooting
 
-Please see http://github.com/cloudant/bigcouch/wiki/troubleshooting
+Please see http://bigcouch.cloudant.com/troubleshoot
 
 ## Contact
 
