@@ -52,7 +52,6 @@ if not env.GetOption('clean'):
 
     require_lib('m')
     require_lib('pthread')
-    require_lib('curl')
     require_lib('nspr4')
 
     ## check for SpiderMonkey development header
@@ -93,6 +92,16 @@ if not env.GetOption('clean'):
         conf.Define("JSSCRIPT_TYPE", "JSScript*")
     else:
         conf.Define("JSSCRIPT_TYPE", "JSObject*")
+
+    ## Check if curl is available
+    try:
+        vsn = runcmd("curl-config --version")[1]
+        vsn = vsn.split()[-1].strip().split(".")
+        vsn = tuple(map(int, vsn))
+        if vsn > (7, 18, 0):
+            require_lib('curl')
+    except:
+        pass
 
     ## Define properties for -h / -V
 
