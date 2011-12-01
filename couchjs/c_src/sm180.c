@@ -127,12 +127,14 @@ evalcx(JSContext *cx, uintN argc, jsval* vp)
     jsval rval;
     JSBool ret = JS_FALSE;
 
+    couch_args* args = (couch_args*) JS_GetContextPrivate(cx);
+
     sandbox = NULL;
     if(!JS_ConvertArguments(cx, argc, argv, "S / o", &str, &sandbox)) {
         return JS_FALSE;
     }
 
-    subcx = JS_NewContext(JS_GetRuntime(cx), 8L * 1024L);
+    subcx = JS_NewContext(JS_GetRuntime(cx), args->stack_size);
     if(!subcx) {
         JS_ReportOutOfMemory(cx);
         return JS_FALSE;
@@ -315,6 +317,7 @@ main(int argc, const char* argv[])
     if(cx == NULL)
         return 1;
 
+    JS_SetContextPrivate(cx, args);
     JS_SetErrorReporter(cx, couch_error);
     JS_ToggleOptions(cx, JSOPTION_XML);
 
