@@ -242,7 +242,7 @@ handle_call({add_change, Row}, From, State) ->
 
 handle_call(next_changes, From, State) ->
     handle_next_changes(From, State);
-    
+
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
