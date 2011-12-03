@@ -168,6 +168,9 @@ handle_cast({send, Data}, #os_proc{writer=Writer, idle=Idle}=OsProc) ->
     end;
 handle_cast(stop, OsProc) ->
     {stop, normal, OsProc};
+handle_cast(garbage_collect, #os_proc{idle=Idle} = OsProc) ->
+    erlang:garbage_collect(),
+    {noreply, OsProc, Idle};
 handle_cast(Msg, #os_proc{idle=Idle}=OsProc) ->
     ?LOG_DEBUG("OS Proc: Unknown cast: ~p", [Msg]),
     {noreply, OsProc, Idle}.
