@@ -16,7 +16,7 @@
 
 -export([start_compact/2]).
 
-%% @spec start_compact(DbName::binary(), GroupId:binary()) -> ok
+%% @spec start_compact(DbName::binary(), GroupId::binary()) -> ok
 %% @doc Compacts the views.  GroupId must not include the _design/ prefix
 start_compact(DbName, GroupId) ->
     Pid = couch_view:get_group_server(DbName, <<"_design/",GroupId/binary>>),
@@ -26,7 +26,7 @@ start_compact(DbName, GroupId) ->
 %% internal functions
 %%=============================================================================
 
-%% @spec compact_group(Group, NewGroup) -> ok
+%% @spec compact_group(Group, NewGroup, DbName) -> ok
 compact_group(Group, EmptyGroup, DbName) ->
     #group{
         current_seq = Seq,
