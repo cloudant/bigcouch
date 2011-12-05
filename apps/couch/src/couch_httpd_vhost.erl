@@ -35,7 +35,7 @@
 %% doc the vhost manager.
 %% This gen_server keep state of vhosts added to the ini and try to
 %% match the Host header (or forwarded) against rules built against
-%% vhost list. 
+%% vhost list.
 %%
 %% Declaration of vhosts take place in the configuration file :
 %%
@@ -54,7 +54,7 @@
 %%      "*.db.example.com = /"  will match all cname on top of db
 %% examples to the root of the machine.
 %%
-%% 
+%%
 %% Rewriting Hosts to path
 %% -----------------------
 %%
@@ -78,9 +78,9 @@
 %%    redirect_vhost_handler = {Module, Fun}
 %%
 %% The function take 2 args : the mochiweb request object and the target
-%%% path. 
+%%% path.
 
-start_link() -> 
+start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %% @doc Try to find a rule matching current Host heade. some rule is
@@ -106,13 +106,13 @@ init(_) ->
         ", ?",
         [{return, list}]
     ),
-    
+
     % Set vhost fun
     DefaultVHostFun = "{couch_httpd_vhost, redirect_to_vhost}",
     VHostFun = couch_httpd:make_arity_2_fun(
         couch_config:get("httpd", "redirect_vhost_handler", DefaultVHostFun)
     ),
-    
+
 
     Self = self(),
     % register for changes in vhosts section
@@ -121,7 +121,7 @@ init(_) ->
             ok = gen_server:call(Self, vhosts_changed, infinity)
         end
     ),
-    
+
     % register for changes in vhost_global_handlers key
     ok = couch_config:register(
         fun("httpd", "vhost_global_handlers") ->
@@ -180,8 +180,8 @@ handle_call({match_vhost, MochiReq}, _From, State) ->
                     Fun(MochiReq1, VhostTarget)
             end
     end,
-    {reply, {ok, FinalMochiReq}, State}; 
-        
+    {reply, {ok, FinalMochiReq}, State};
+
 % update vhosts
 handle_call(vhosts_changed, _From, State) ->
     {reply, ok, State#vhosts{vhosts= make_vhosts()}};
@@ -221,7 +221,7 @@ append_path("/"=_Target, "/"=_Path) ->
 append_path(Target, Path) ->
     Target ++ Path.
 
-% default redirect vhost handler 
+% default redirect vhost handler
 
 redirect_to_vhost(MochiReq, VhostTarget) ->
     Path = MochiReq:get(raw_path),
@@ -229,7 +229,7 @@ redirect_to_vhost(MochiReq, VhostTarget) ->
 
     ?LOG_DEBUG("Vhost Target: '~p'~n", [Target]),
 
-    Headers = mochiweb_headers:enter("x-couchdb-vhost-path", Path, 
+    Headers = mochiweb_headers:enter("x-couchdb-vhost-path", Path,
         MochiReq:get(headers)),
 
     % build a new mochiweb request
@@ -244,7 +244,7 @@ redirect_to_vhost(MochiReq, VhostTarget) ->
     MochiReq1.
 
 %% if so, then it will not be rewritten, but will run as a normal couchdb request.
-%* normally you'd use this for _uuids _utils and a few of the others you want to 
+%* normally you'd use this for _uuids _utils and a few of the others you want to
 %% keep available on vhosts. You can also use it to make databases 'global'.
 vhost_global( VhostGlobals, MochiReq) ->
     RawUri = MochiReq:get(raw_path),
@@ -265,14 +265,14 @@ try_bind_vhost([], _HostParts, _Port, _PathParts) ->
 try_bind_vhost([VhostSpec|Rest], HostParts, Port, PathParts) ->
     {{VHostParts, VPort, VPath}, Path} = VhostSpec,
     case bind_port(VPort, Port) of
-        ok -> 
+        ok ->
             case bind_vhost(lists:reverse(VHostParts), HostParts, []) of
                 {ok, Bindings, Remainings} ->
                     case bind_path(VPath, PathParts) of
                         {ok, PathParts1} ->
                             Path1 = make_target(Path, Bindings, Remainings, []),
                             {make_path(Path1), make_path(PathParts1)};
-                        fail -> 
+                        fail ->
                             try_bind_vhost(Rest, HostParts, Port,
                                 PathParts)
                     end;
@@ -283,7 +283,7 @@ try_bind_vhost([VhostSpec|Rest], HostParts, Port, PathParts) ->
 
 %% doc: build new patch from bindings. bindings are query args
 %% (+ dynamic query rewritten if needed) and bindings found in
-%% bind_path step. 
+%% bind_path step.
 %% TODO: merge code wit rewrite. But we need to make sure we are
 %% in string here.
 make_target([], _Bindings, _Remaining, Acc) ->
@@ -313,7 +313,7 @@ bind_vhost([],[], Bindings) -> {ok, Bindings, []};
 bind_vhost([?MATCH_ALL], [], _Bindings) -> fail;
 bind_vhost([?MATCH_ALL], Rest, Bindings) -> {ok, Bindings, Rest};
 bind_vhost([], _HostParts, _Bindings) -> fail;
-bind_vhost([{bind, Token}|Rest], [Match|RestHost], Bindings) -> 
+bind_vhost([{bind, Token}|Rest], [Match|RestHost], Bindings) ->
     bind_vhost(Rest, RestHost, [{{bind, Token}, Match}|Bindings]);
 bind_vhost([Cname|Rest], [Cname|RestHost], Bindings) ->
     bind_vhost(Rest, RestHost, Bindings);
@@ -352,14 +352,14 @@ parse_vhost(Vhost) ->
             H1 = make_spec(H, []),
             {H1, P, string:tokens(Path, "/")}
     end.
-            
+
 
 split_host_port(HostAsString) ->
     case string:rchr(HostAsString, $:) of
         0 ->
             {split_host(HostAsString), '*'};
         N ->
-            HostPart = string:substr(HostAsString, 1, N-1), 
+            HostPart = string:substr(HostAsString, 1, N-1),
             case (catch erlang:list_to_integer(string:substr(HostAsString,
                             N+1, length(HostAsString)))) of
                 {'EXIT', _} ->
@@ -388,7 +388,7 @@ make_spec([P|R], Acc) ->
 
 
 parse_var(P) ->
-    case P of 
+    case P of
         ":" ++ Var ->
             {bind, Var};
         _ -> P
