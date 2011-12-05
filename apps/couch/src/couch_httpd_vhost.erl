@@ -68,7 +68,7 @@
 %%
 %% First rule pass wildcard as dbname, second do the same but use a
 %% variable name and the third one allows you to use any app with
-%% @ddocname in any db with @dbname .
+%% ddocname in any db with dbname .
 %%
 %% You could also change the default function to handle request by
 %% changing the setting `redirect_vhost_handler` in `httpd` section of
