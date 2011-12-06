@@ -20,7 +20,7 @@
 % all/0 function
 
 -export([start_link/0, stop/0]).
--export([all/0, add_task/3, update/1, update/2, set_update_frequency/1]).
+-export([all/0, add_task/1, add_task/3, update/1, update/2, set_update_frequency/1]).
 
 -export([init/1, terminate/2, code_change/3]).
 -export([handle_call/3, handle_cast/2, handle_info/2]).
@@ -52,6 +52,13 @@ add_task(Type, TaskName, StatusText) ->
     },
     gen_server:call(?MODULE, Msg).
 
+add_task(Props) ->
+    put(task_status_update, {{0, 0, 0}, 0}),
+    Ts = timestamp(),
+    TaskProps = lists:ukeysort(
+        1, [{started_on, Ts}, {updated_on, Ts} | Props]),
+    put(task_status_props, TaskProps),
+    gen_server:call(?MODULE, {add_task, TaskProps}).
 
 set_update_frequency(Msecs) ->
     put(task_status_update, {{0, 0, 0}, Msecs * 1000}).
@@ -82,6 +89,15 @@ terminate(_Reason,_State) ->
     ok.
 
 
+handle_call({add_task, TaskProps}, {From, _}, Server) ->
+    case ets:lookup(?MODULE, From) of
+    [] ->
+        true = ets:insert(?MODULE, {From, TaskProps}),
+        erlang:monitor(process, From),
+        {reply, ok, Server};
+    [_] ->
+        {reply, {add_task_error, already_registered}, Server}
+    end;
 handle_call({add_task, Type, TaskName, StatusText}, {From, _}, Server) ->
     case ets:lookup(?MODULE, From) of
     [] ->
@@ -105,9 +121,16 @@ handle_call(all, _, Server) ->
     {reply, All, Server}.
 
 
-handle_cast({update_status, Pid, StatusText}, Server) ->
-    [{Pid, {Type, TaskName, _StatusText}}] = ets:lookup(?MODULE, Pid),
-    true = ets:insert(?MODULE, {Pid, {Type, TaskName, StatusText}}),
+handle_cast({update_status, Pid, NewProps}, Server) ->
+    case ets:lookup(?MODULE, Pid) of
+    [{Pid, _CurProps}] ->
+        ?LOG_DEBUG("New task status for ~p: ~p", [Pid, NewProps]),
+        true = ets:insert(?MODULE, {Pid, NewProps});
+    _ ->
+        % Task finished/died in the meanwhile and we must have received
+        % a monitor message before this call - ignore.
+        ok
+    end,
     {noreply, Server};
 handle_cast(stop, State) ->
     {stop, normal, State}.
@@ -121,3 +144,9 @@ handle_info({'DOWN', _MonitorRef, _Type, Pid, _Info}, Server) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+timestamp() ->
+    timestamp(now()).
+
+timestamp({Mega, Secs, _}) ->
+    Mega * 1000000 + Secs.
