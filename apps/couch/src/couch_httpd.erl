@@ -21,6 +21,7 @@
 -export([make_fun_spec_strs/1]).
 -export([make_arity_1_fun/1, make_arity_2_fun/1, make_arity_3_fun/1]).
 -export([parse_form/1,json_body/1,json_body_obj/1,body/1,doc_etag/1, make_etag/1, etag_respond/3, etag_maybe/2]).
+-export([etag_match/2]).
 -export([primary_header_value/2,partition/1,serve_file/3,serve_file/4, server_header/0]).
 -export([start_chunked_response/3,send_chunk/2,log_request/2]).
 -export([start_response_length/4, start_response/3, send/2]).
