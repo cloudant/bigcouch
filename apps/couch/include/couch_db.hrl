@@ -308,3 +308,12 @@
     size = 0,
     atts = []
 }).
+
+% backporting for COUCHDB-1270 compatibility
+-define(term_to_bin(T), term_to_binary(T, [{minor_version, 1}])).
+-define(term_size(T),
+    try
+        erlang:external_size(T)
+    catch _:_ ->
+        byte_size(?term_to_bin(T))
+    end).
