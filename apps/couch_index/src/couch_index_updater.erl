@@ -154,7 +154,9 @@ update(Idx, Mod, IdxState) ->
             end
         end,
 
-        Proc = fun(DocInfo, _, {IdxStateAcc, _}) ->
+        Proc = fun(FullDocInfo, _, {IdxStateAcc, _}) ->
+            io:format(standard_error, "~p~n", [FullDocInfo]),
+            DocInfo = couch_doc:to_doc_info(FullDocInfo),
             HighSeq = DocInfo#doc_info.high_seq,
             case CommittedOnly and (HighSeq > DbCommittedSeq) of
                 true ->
