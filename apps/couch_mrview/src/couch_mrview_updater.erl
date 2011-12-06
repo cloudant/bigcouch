@@ -33,15 +33,15 @@ start_update(Partial, State, NumChanges) ->
 
     Self = self(),
     MapFun = fun() ->
-        couch_task_status:add_task([
-            {type, indexer},
-            {database, State#mrst.db_name},
-            {design_document, State#mrst.idx_name},
-            {progress, 0},
-            {changes_done, 0},
-            {total_changes, NumChanges}
-        ]),
-        couch_task_status:set_update_frequency(500),
+        %couch_task_status:add_task([
+        %    {type, indexer},
+        %    {database, State#mrst.db_name},
+        %    {design_document, State#mrst.idx_name},
+        %    {progress, 0},
+        %    {changes_done, 0},
+        %    {total_changes, NumChanges}
+        %]),
+        %couch_task_status:set_update_frequency(500),
         map_docs(Self, InitState)
     end,
     WriteFun = fun() -> write_results(Self, InitState) end,
@@ -156,13 +156,13 @@ compute_map_results(#mrst{qserver = Qs}, Dequeued) ->
     end,
     {MaxSeq, DeletedResults, Docs} =
         lists:foldl(FoldFun, {0, [], []}, Dequeued),
-    {ok, MapResultList} = couch_query_servers:map_docs_raw(Qs, Docs),
+    {ok, MapResultList} = couch_query_servers:map_docs(Qs, Docs),
     NotDeletedResults = lists:zipwith(
         fun(#doc{id = Id}, MapResults) -> {Id, MapResults} end,
         Docs,
         MapResultList),
     AllMapResults = DeletedResults ++ NotDeletedResults,
-    update_task(length(AllMapResults)),
+    %update_task(length(AllMapResults)),
     {ok, {MaxSeq, AllMapResults}}.
 
 
@@ -202,9 +202,9 @@ merge_results([{Seq, Results} | Rest], SeqAcc, ViewKVs, DocIdKeys) ->
 
 merge_results({DocId, []}, ViewKVs, DocIdKeys) ->
     {ViewKVs, [{DocId, []} | DocIdKeys]};
-merge_results({DocId, RawResults}, ViewKVs, DocIdKeys) ->
-    JsonResults = couch_query_servers:raw_to_ejson(RawResults),
-    Results = [[list_to_tuple(Res) || Res <- FunRs] || FunRs <- JsonResults],
+merge_results({DocId, Results}, ViewKVs, DocIdKeys) ->
+    %JsonResults = couch_query_servers:raw_to_ejson(RawResults),
+    %Results = [[list_to_tuple(Res) || Res <- FunRs] || FunRs <- JsonResults],
     {ViewKVs1, ViewIdKeys} = insert_results(DocId, Results, ViewKVs, [], []),
     {ViewKVs1, [ViewIdKeys | DocIdKeys]}.
 
