@@ -281,6 +281,7 @@
     feed = "normal",
     dir = fwd,
     since = 0,
+    until = 0,
     limit = 1000000000000000,
     style = main_only,
     heartbeat,
