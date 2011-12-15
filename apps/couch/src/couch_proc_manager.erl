@@ -68,7 +68,7 @@ handle_call({ret_proc, #proc{client=Ref, pid=Pid} = Proc}, _From, State) ->
     % table before the insert.  Don't know which approach is cheaper.
     case is_process_alive(Pid) of true ->
         gen_server:cast(Pid, garbage_collect),
-        ets:insert(State#state.tab, Proc);
+        ets:insert(State#state.tab, Proc#proc{client=nil});
     false -> ok end,
     {reply, true, State};
 
