@@ -17,7 +17,7 @@ get_proc_count() ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    {ok, #state{tab = ets:new(procs, [{keypos, #proc.pid}])}}.
+    {ok, #state{tab = ets:new(procs, [ordered_set, {keypos, #proc.pid}])}}.
 
 handle_call(get_table, _From, State) ->
     {reply, State#state.tab, State};
@@ -27,33 +27,52 @@ handle_call(get_proc_count, _From, State) ->
 
 handle_call({get_proc, #doc{body={Props}}=DDoc, DDocKey}, From, State) ->
     Lang = couch_util:get_value(<<"language">>, Props, <<"javascript">>),
-    try get_procs(State#state.tab, Lang) of
-    [] ->
-        spawn_link(?MODULE, new_proc, [From, Lang, DDoc, DDocKey]),
-        {noreply, State};
-    Procs ->
-        case proc_with_ddoc(DDoc, DDocKey, Procs) of
-        {ok, Proc0} ->
-            Client = element(1, From),
-            Proc = Proc0#proc{client = erlang:monitor(process, Client)},
-            ets:insert(State#state.tab, Proc),
-            {reply, {ok, Proc, get_query_server_config()}, State};
-        {error, Reason} ->
-            {reply, {error, Reason}, State}
+    IterFun = fun(Proc0, Acc) ->
+        case lists:member(DDocKey, Proc0#proc.ddoc_keys) of
+            true ->
+                {Client, _} = From,
+                Proc = Proc0#proc{client = erlang:monitor(process, Client)},
+                ets:insert(State#state.tab, Proc),
+                {stop, Proc};
+            false ->
+                {ok, Acc}
         end
+    end,
+    TeachFun = fun(Proc0, Acc) ->
+        try
+            {ok, Proc} = teach_ddoc(DDoc, DDocKey, Proc0),
+            {stop, Proc}
+        catch _:_ ->
+            {ok, Acc}
+        end
+    end,
+    try iter_procs(State#state.tab, Lang, IterFun, nil) of
+    {not_found, _} ->
+        case iter_procs(State#state.tab, Lang, TeachFun, nil) of
+        {not_found, _} ->
+            spawn_link(?MODULE, new_proc, [From, Lang, DDoc, DDocKey]),
+            {noreply, State};
+        {ok, Proc} ->
+            {reply, {ok, Proc, get_query_server_config()}, State}
+        end;
+    {ok, Proc} ->
+        {reply, {ok, Proc, get_query_server_config()}, State}
     catch error:Reason ->
         ?LOG_ERROR("~p ~p ~p", [?MODULE, Reason, erlang:get_stacktrace()]),
         {reply, {error, Reason}, State}
     end;
 
 handle_call({get_proc, Lang}, {Client, _} = From, State) ->
-    try get_procs(State#state.tab, Lang) of
-    [] ->
-        spawn_link(?MODULE, new_proc, [From, Lang]),
-        {noreply, State};
-    [Proc0|_] ->
+    IterFun = fun(Proc0, _Acc) ->
         Proc = Proc0#proc{client = erlang:monitor(process, Client)},
         ets:insert(State#state.tab, Proc),
+        {stop, Proc}
+    end,
+    try iter_procs(State#state.tab, Lang, IterFun, nil) of
+    {not_found, _} ->
+        spawn_link(?MODULE, new_proc, [From, Lang]),
+        {noreply, State};
+    {ok, Proc} ->
         {reply, {ok, Proc, get_query_server_config()}, State}
     catch error:Reason ->
         ?LOG_ERROR("~p ~p ~p", [?MODULE, Reason, erlang:get_stacktrace()]),
@@ -128,10 +147,32 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-get_procs(Tab, Lang) when is_binary(Lang) ->
-    get_procs(Tab, binary_to_list(Lang));
-get_procs(Tab, Lang) when is_list(Lang) ->
-    ets:match_object(Tab, #proc{lang=Lang, client=nil, _='_'}).
+
+iter_procs(Tab, Lang, Fun, Acc) when is_list(Lang) ->
+    iter_procs(Tab, list_to_binary(Lang), Fun, Acc);
+iter_procs(Tab, Lang, Fun, Acc) ->
+    Pattern = #proc{lang=Lang, client=nil, _='_'},
+    case ets:select_reverse(Tab, Pattern, 25) of
+        '$end_of_table' ->
+            {not_found, Acc};
+        Continuation ->
+            iter_procs(Continuation, Fun, Acc)
+    end.
+
+iter_procs({[], Continuation0}, Fun, Acc) ->
+    case ets:select_reverse(Continuation0) of
+        '$end_of_table' ->
+            {not_found, Acc};
+        Continuation1 ->
+            iter_procs(Continuation1, Fun, Acc)
+    end;
+iter_procs({[Proc | Rest], Continuation}, Fun, Acc0) ->
+    case Fun(Proc, Acc0) of
+        {ok, Acc1} ->
+            iter_procs({Rest, Continuation}, Fun, Acc1);
+        {stop, Acc1} ->
+            {ok, Acc1}
+    end.
 
 new_proc(From, Lang) ->
     case new_proc_int(From, Lang) of
