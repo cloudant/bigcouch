@@ -15,7 +15,6 @@ used for read/write operations.
 BigCouch is made available under an Apache 2.0 license. See the LICENSE file
 for details.
 
-
 ## Getting Started
 
 If your main intent is to use BigCouch, you can follow [this
@@ -27,7 +26,6 @@ More information can be found on the official [BigCouch
 website](http://bigcouch.cloudant.com/). You can also ask questions on or
 subscribe to [the mailing list](http://groups.google.com/group/bigcouch-user).
 
-
 ## Troubleshooting
 
 Please see http://bigcouch.cloudant.com/troubleshoot
@@ -36,8 +34,6 @@ Please see http://bigcouch.cloudant.com/troubleshoot
 
 Cloudant folks are usually hanging out in IRC. Freenode, channel #cloudant.
 There's also a [Google Group](http://groups.google.com/group/bigcouch-user).
-
-----
 
 [1]: http://couchdb.apache.org
 [2]: http://cloudant.com
