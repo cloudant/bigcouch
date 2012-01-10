@@ -41,6 +41,4 @@ There's also a [Google Group](http://groups.google.com/group/bigcouch-user).
 
 [1]: http://couchdb.apache.org
 [2]: http://cloudant.com
-[3]: http://haproxy.1wt.eu/
 [4]: http://www.allthingsdistributed.com/2007/10/amazons_dynamo.html
-[5]: https://github.com/cloudant/bigcouch/wiki/API-Extensions
