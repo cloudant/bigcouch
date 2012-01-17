@@ -484,13 +484,11 @@ atts_to_mp([Att | RestAtts], Boundary, WriteFun,
 
 
 doc_from_multi_part_stream(ContentType, DataFun) ->
-    Parent = self(),
-    Parser = spawn_link(fun() ->
+    {Parser, ParserRef} = spawn_monitor(fun() ->
         {<<"--">>, _, _} = couch_httpd:parse_multipart_request(
             ContentType, DataFun,
             fun(Next) -> mp_parse_doc(Next, []) end),
-        unlink(Parent),
-        Parent ! {self(), finished}
+            exit(ok)
         end),
     Parser ! {get_doc_bytes, self()},
     receive
@@ -505,8 +503,14 @@ doc_from_multi_part_stream(ContentType, DataFun) ->
                 A
             end, Doc#doc.atts),
         WaitFun = fun() ->
-            receive {Parser, finished} -> ok end,
-            erlang:put(mochiweb_request_recv, true)
+            receive {'DOWN', ParserRef, _, _, Result} -> ok end,
+            case Result of
+                ok ->
+                    erlang:put(mochiweb_request_recv, true);
+                _Else ->
+                    ?LOG_ERROR("Unexpected msg while parsing multipart stream: ~p",
+                        [Result])
+            end
         end,
         {ok, Doc#doc{atts=Atts2}, WaitFun, Parser}
     end.
