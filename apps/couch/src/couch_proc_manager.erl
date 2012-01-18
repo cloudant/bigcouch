@@ -152,7 +152,8 @@ iter_procs(Tab, Lang, Fun, Acc) when is_list(Lang) ->
     iter_procs(Tab, list_to_binary(Lang), Fun, Acc);
 iter_procs(Tab, Lang, Fun, Acc) ->
     Pattern = #proc{lang=Lang, client=nil, _='_'},
-    case ets:select_reverse(Tab, Pattern, 25) of
+    MSpec = [{Pattern, [], ['$_']}],
+    case ets:select_reverse(Tab, MSpec, 25) of
         '$end_of_table' ->
             {not_found, Acc};
         Continuation ->
