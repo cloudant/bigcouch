@@ -26,22 +26,20 @@ handle_call(get_proc_count, _From, State) ->
     {reply, ets:info(State#state.tab, size), State};
 
 handle_call({get_proc, #doc{body={Props}}=DDoc, DDocKey}, From, State) ->
+    {Client, _} = From,
     Lang = couch_util:get_value(<<"language">>, Props, <<"javascript">>),
-    IterFun = fun(Proc0, Acc) ->
-        case lists:member(DDocKey, Proc0#proc.ddoc_keys) of
+    IterFun = fun(Proc, Acc) ->
+        case lists:member(DDocKey, Proc#proc.ddoc_keys) of
             true ->
-                {Client, _} = From,
-                Proc = Proc0#proc{client = erlang:monitor(process, Client)},
-                ets:insert(State#state.tab, Proc),
-                {stop, Proc};
+                {stop, assign_proc(State#state.tab, Client, Proc)};
             false ->
                 {ok, Acc}
         end
     end,
     TeachFun = fun(Proc0, Acc) ->
         try
-            {ok, Proc} = teach_ddoc(DDoc, DDocKey, Proc0),
-            {stop, Proc}
+            {ok, Proc1} = teach_ddoc(DDoc, DDocKey, Proc0),
+            {stop, assign_proc(State#state.tab, Client, Proc1)}
         catch _:_ ->
             {ok, Acc}
         end
@@ -63,10 +61,8 @@ handle_call({get_proc, #doc{body={Props}}=DDoc, DDocKey}, From, State) ->
     end;
 
 handle_call({get_proc, Lang}, {Client, _} = From, State) ->
-    IterFun = fun(Proc0, _Acc) ->
-        Proc = Proc0#proc{client = erlang:monitor(process, Client)},
-        ets:insert(State#state.tab, Proc),
-        {stop, Proc}
+    IterFun = fun(Proc, _Acc) ->
+        {stop, assign_proc(State#state.tab, Client, Proc)}
     end,
     try iter_procs(State#state.tab, Lang, IterFun, nil) of
     {not_found, _} ->
@@ -115,9 +111,8 @@ handle_cast(_Msg, State) ->
 
 handle_info({'EXIT', _, {ok, Proc0, {Client,_} = From}}, State) ->
     link(Proc0#proc.pid),
-    Proc = Proc0#proc{client = erlang:monitor(process, Client)},
+    Proc = assign_proc(State#state.tab, Client, Proc0),
     gen_server:reply(From, {ok, Proc, get_query_server_config()}),
-    ets:insert(State#state.tab, Proc),
     {noreply, State};
 
 handle_info({'EXIT', Pid, Reason}, State) ->
@@ -148,8 +143,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 
-iter_procs(Tab, Lang, Fun, Acc) when is_list(Lang) ->
-    iter_procs(Tab, list_to_binary(Lang), Fun, Acc);
+iter_procs(Tab, Lang, Fun, Acc) when is_binary(Lang) ->
+    iter_procs(Tab, binary_to_list(Lang), Fun, Acc);
 iter_procs(Tab, Lang, Fun, Acc) ->
     Pattern = #proc{lang=Lang, client=nil, _='_'},
     MSpec = [{Pattern, [], ['$_']}],
@@ -224,6 +219,11 @@ make_proc(Pid, Lang, Mod) ->
     },
     unlink(Pid),
     {ok, Proc}.
+
+assign_proc(Tab, Client, #proc{client=nil}=Proc0) ->
+    Proc = Proc0#proc{client = erlang:monitor(process, Client)},
+    ets:insert(Tab, Proc),
+    Proc.
 
 get_query_server_config() ->
     Limit = couch_config:get("query_server_config", "reduce_limit", "true"),
