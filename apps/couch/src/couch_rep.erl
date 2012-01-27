@@ -275,7 +275,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 terminate(normal, #state{checkpoint_scheduled=nil, init_args=[RepId, _, _, Module]} = State) ->
     do_terminate(State),
     Module:replication_completed(RepId);
-    
+
 terminate(normal, #state{init_args=[RepId, _, _, Module]} = State) ->
     timer:cancel(State#state.checkpoint_scheduled),
     do_terminate(do_checkpoint(State)),
@@ -409,7 +409,7 @@ do_terminate(State) ->
         continuous = Continuous,
         source_log = #doc{body={OldHistory}}
     } = State,
-    
+
     NewRepHistory = case CheckpointHistory of
     nil ->
         {[{<<"no_changes">>, true} | OldHistory]};
@@ -504,7 +504,7 @@ make_replication_id({Props}, UserCtx, 1) ->
     maybe_append_filters({Props}, [HostName, Src, Tgt], UserCtx).
 
 maybe_append_filters({Props}, Base, UserCtx) ->
-    Base2 = Base ++ 
+    Base2 = Base ++
         case couch_util:get_value(<<"filter">>, Props) of
         undefined ->
             case couch_util:get_value(<<"doc_ids">>, Props) of
@@ -794,7 +794,7 @@ commit_to_both(Source, Target, RequiredSeq) ->
         exit(replication_link_failure)
     end,
     {SourceStartTime, TargetStartTime}.
-    
+
 ensure_full_commit(#http_db{headers = Headers} = Target) ->
     Headers1 = [
         {"Content-Length", 0} |
