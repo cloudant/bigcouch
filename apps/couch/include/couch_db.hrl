@@ -17,7 +17,10 @@
 -define(MIN_STR, <<"">>).
 -define(MAX_STR, <<255>>). % illegal utf string
 
--define(JSON_ENCODE(V), couch_util:json_encode(V)).
+% the lowest possible database sequence number
+-define(LOWEST_SEQ, 0).
+
+-define(JSON_ENCODE(V), jiffy:encode(V, [uescape])).
 -define(JSON_DECODE(V), couch_util:json_decode(V)).
 
 -define(b2l(V), binary_to_list(V)).
@@ -170,6 +173,10 @@
     waiting_delayed_commit = nil,
     revs_limit = 1000,
     fsync_options = [],
+    options = [],
+    compression,
+    before_doc_update = nil, % nil | fun(Doc, Db) -> NewDoc
+    after_doc_read = nil,     % nil | fun(Doc, Db) -> NewDoc
     is_sys_db = false
     }).
 

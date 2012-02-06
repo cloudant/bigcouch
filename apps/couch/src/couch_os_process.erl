@@ -60,7 +60,7 @@ prompt(Pid, Data) ->
 % Utility functions for reading and writing
 % in custom functions
 writeline(#os_proc{port=Port}, Data) ->
-    port_command(Port, Data ++ "\n").
+    port_command(Port, [Data, $\n]).
 
 readline(#os_proc{} = OsProc) ->
     readline(OsProc, []).

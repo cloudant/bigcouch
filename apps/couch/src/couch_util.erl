@@ -91,7 +91,7 @@ shutdown_sync(Pid) ->
     after
         erlang:demonitor(MRef, [flush])
     end.
-    
+
 
 simple_call(Pid, Message) ->
     MRef = erlang:monitor(process, Pid),
@@ -193,7 +193,7 @@ json_user_ctx(#db{name=ShardName, user_ctx=Ctx}) ->
     {[{<<"db">>, mem3:dbname(ShardName)},
             {<<"name">>,Ctx#user_ctx.name},
             {<<"roles">>,Ctx#user_ctx.roles}]}.
-    
+
 
 % returns a random integer
 rand32() ->
@@ -396,11 +396,12 @@ json_encode(V) ->
     end,
     (mochijson2:encoder([{handler, Handler}]))(V).
 
-json_decode(V) ->
-    try (mochijson2:decoder([{object_hook, fun({struct,L}) -> {L} end}]))(V)
+json_decode(D) ->
+    try
+        jiffy:decode(D)
     catch
-        _Type:_Error ->
-            throw({invalid_json,V})
+        throw:Error ->
+            throw({invalid_json, Error})
     end.
 
 verify([X|RestX], [Y|RestY], Result) ->

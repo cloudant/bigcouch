@@ -10,7 +10,6 @@
         couch_log,
         couch_primary_services,
         couch_proc_manager,
-        couch_rep_sup,
         couch_secondary_services,
         couch_server,
         couch_server_sup,
@@ -21,5 +20,5 @@
     ]},
     {mod, {couch_app, []}},
     {applications, [kernel, stdlib, crypto, sasl, inets, oauth, ibrowse,
-        mochiweb, ssl]}
+        mochiweb, jiffy, ssl]}
 ]}.

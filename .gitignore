@@ -8,6 +8,7 @@
 erl_crash.dump
 
 # building
+deps
 apps/*/ebin/
 rel/dbcore
 rel/bigcouch.config
