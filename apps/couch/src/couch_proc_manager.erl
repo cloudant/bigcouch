@@ -75,16 +75,13 @@ handle_call({get_proc, Lang}, {Client, _} = From, State) ->
         {reply, {error, Reason}, State}
     end;
 
-handle_call({ret_proc, #proc{client=Ref, pid=Pid} = Proc}, _From, State) ->
+handle_call({ret_proc, #proc{client=Ref} = Proc}, _From, State) ->
     erlang:demonitor(Ref, [flush]),
     % We need to check if the process is alive here, as the client could be
     % handing us a #proc{} with a dead one.  We would have already removed the
     % #proc{} from our own table, so the alternative is to do a lookup in the
     % table before the insert.  Don't know which approach is cheaper.
-    case is_process_alive(Pid) of true ->
-        gen_server:cast(Pid, garbage_collect),
-        ets:insert(State#state.tab, Proc#proc{client=nil});
-    false -> ok end,
+    return_proc(State#state.tab, Proc),
     {reply, true, State};
 
 handle_call(_Call, _From, State) ->
@@ -124,10 +121,8 @@ handle_info({'DOWN', Ref, _, _, _Reason}, State) ->
     case ets:match_object(State#state.tab, #proc{client=Ref, _='_'}) of
     [] ->
         ok;
-    [#proc{pid = Pid} = Proc] ->
-        case is_process_alive(Pid) of true ->
-            ets:insert(State#state.tab, Proc);
-        false -> ok end
+    [#proc{} = Proc] ->
+        return_proc(State#state.tab, Proc)
     end,
     {noreply, State};
 
@@ -224,6 +219,14 @@ assign_proc(Tab, Client, #proc{client=nil}=Proc0) ->
     Proc = Proc0#proc{client = erlang:monitor(process, Client)},
     ets:insert(Tab, Proc),
     Proc.
+
+return_proc(Tab, #proc{pid=Pid} = Proc) ->
+    case is_process_alive(Pid) of true ->
+        gen_server:cast(Pid, garbage_collect),
+        ets:insert(Tab, Proc#proc{client=nil});
+    false ->
+        ets:delete(Tab, Pid)
+    end.
 
 get_query_server_config() ->
     Limit = couch_config:get("query_server_config", "reduce_limit", "true"),
