@@ -20,6 +20,9 @@
 -export([doc_to_multi_part_stream/5, len_doc_to_multi_part_stream/4]).
 -export([abort_multi_part_stream/1]).
 
+%% needed by new replicator
+-export([mp_parse_doc1/2]).
+
 -include("couch_db.hrl").
 
 % helpers used by to_json_obj
@@ -482,6 +485,39 @@ atts_to_mp([Att | RestAtts], Boundary, WriteFun,
     WriteFun(<<"\r\n--", Boundary/binary>>),
     atts_to_mp(RestAtts, Boundary, WriteFun, SendEncodedAtts).
 
+
+%% This is a new verion of mp_parse_doc, required because it's been exported to reuse
+%% in the new couch_replicator_api_wrap
+mp_parse_doc1({headers, H}, []) ->
+    case couch_util:get_value("content-type", H) of
+    {"application/json", _} ->
+        fun (Next) ->
+            mp_parse_doc1(Next, [])
+        end
+    end;
+mp_parse_doc1({body, Bytes}, AccBytes) ->
+    fun (Next) ->
+        mp_parse_doc1(Next, [Bytes | AccBytes])
+    end;
+mp_parse_doc1(body_end, AccBytes) ->
+    receive {get_doc_bytes, Ref, From} ->
+        From ! {doc_bytes, Ref, lists:reverse(AccBytes)}
+    end,
+    fun mp_parse_atts1/1.
+
+mp_parse_atts1(eof) ->
+    ok;
+mp_parse_atts1({headers, _H}) ->
+    fun mp_parse_atts1/1;
+mp_parse_atts1({body, Bytes}) ->
+    receive {get_bytes, Ref, From} ->
+        From ! {bytes, Ref, Bytes}
+    end,
+    fun mp_parse_atts1/1;
+mp_parse_atts1(body_end) ->
+    fun mp_parse_atts1/1.
+
+%% End of new mp_parse_doc1
 
 doc_from_multi_part_stream(ContentType, DataFun) ->
     Parent = self(),
