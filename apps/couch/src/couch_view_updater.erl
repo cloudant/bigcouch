@@ -32,17 +32,15 @@ update(Owner, Group, #db{name = DbName} = Db) ->
         current_seq = Seq,
         purge_seq = PurgeSeq
     } = Group,
-    %%couch_task_status:add_task(<<"View Group Indexer">>, <<DbName/binary," ",GroupName/binary>>, <<"Starting index update">>),
+
 
     DbPurgeSeq = couch_db:get_purge_seq(Db),
     Group2 =
     if DbPurgeSeq == PurgeSeq ->
         Group;
     DbPurgeSeq == PurgeSeq + 1 ->
-        %%couch_task_status:update(<<"Removing purged entries from view index.">>),
         purge_index(Group, Db);
     true ->
-        %%couch_task_status:update(<<"Resetting view index due to lost purge entries.">>),
         exit(reset)
     end,
     {ok, MapQueue} = couch_work_queue:new(
@@ -55,8 +53,16 @@ update(Owner, Group, #db{name = DbName} = Db) ->
     spawn_link(?MODULE, do_writes, [Self, Owner, Group2, WriteQueue, Seq == 0]),
     % compute on all docs modified since we last computed.
     TotalChanges = couch_db:count_changes_since(Db, Seq),
+    couch_task_status:add_task([
+        {type, indexer},
+        {database, DbName},
+        {design_document, GroupName},
+        {progress, 0},
+        {changes_done, 0},
+        {total_changes, TotalChanges}
+    ]),
     % update status every half second
-    %%couch_task_status:set_update_frequency(500),
+    couch_task_status:set_update_frequency(500),
     #group{ design_options = DesignOptions } = Group,
     IncludeDesign = couch_util:get_value(<<"include_design">>,
         DesignOptions, false),
@@ -69,8 +75,6 @@ update(Owner, Group, #db{name = DbName} = Db) ->
     EnumFun = fun ?MODULE:load_docs/3,
     Acc0 = {0, Db, MapQueue, DocOpts, IncludeDesign, TotalChanges},
     {ok, _, _} = couch_db:enum_docs_since(Db, Seq, EnumFun, Acc0, []),
-    %%couch_task_status:set_update_frequency(0),
-    %%couch_task_status:update("Finishing."),
     couch_work_queue:close(MapQueue),
     receive {new_group, NewGroup} ->
         exit({new_group,
@@ -78,8 +82,7 @@ update(Owner, Group, #db{name = DbName} = Db) ->
     end.
 
 load_docs(DocInfo, _, {I, Db, MapQueue, DocOpts, IncludeDesign, Total} = Acc) ->
-    %%couch_task_status:update("Processed ~p of ~p changes (~p%)", [I, Total,
-        %%(I*100) div Total]),
+    couch_task_status:update([{progress, I}, {changes_done, Total}]),
     load_doc(Db, DocInfo, MapQueue, DocOpts, IncludeDesign),
     {ok, setelement(1, Acc, I+1)}.
 
