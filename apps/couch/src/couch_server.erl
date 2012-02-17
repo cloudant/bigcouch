@@ -293,13 +293,11 @@ handle_call({delete, DbName, _Options}, _From, Server) ->
         [#db{main_pid=Pid, compactor_pid=Froms}] when is_list(Froms) ->
             % icky hack of field values - compactor_pid used to store clients
             true = ets:delete(couch_dbs, DbName),
-            true = ets:delete(couch_lru, DbName),
             exit(Pid, kill),
             [gen_server:reply(F, not_found) || F <- Froms],
             Server#server{dbs_open=Server#server.dbs_open - 1};
         [#db{main_pid=Pid}] ->
             true = ets:delete(couch_dbs, DbName),
-            true = ets:delete(couch_lru, DbName),
             exit(Pid, kill),
             Server#server{dbs_open=Server#server.dbs_open - 1}
         end,
@@ -345,7 +343,6 @@ handle_info({'EXIT', Pid, Reason}, #server{dbs_open=DbsOpen}=Server) ->
             ok
         end,
         true = ets:delete(couch_dbs, DbName),
-        true = ets:delete(couch_lru, DbName),
         {noreply, Server#server{dbs_open=DbsOpen - 1}};
     [] ->
         {noreply, Server}
