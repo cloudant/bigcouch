@@ -139,7 +139,7 @@ load_doc(Db, DI, MapQueue, DocOpts, IncludeDesign) ->
             couch_work_queue:queue(MapQueue, {Seq, Doc})
         end
     end.
-    
+
 -spec do_maps(#group{}, pid(), pid(), any()) -> any().
 do_maps(Group, MapQueue, WriteQueue, ViewEmptyKVs) ->
     case couch_work_queue:dequeue(MapQueue) of
