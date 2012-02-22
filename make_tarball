@@ -1,0 +1,20 @@
+#!/bin/sh -e
+
+COUCHDB_VERSION=`git describe --match 1.*`
+BIGCOUCH_VERSION=`git describe`
+
+rm -rf .tmp
+git archive HEAD --prefix=.tmp/bigcouch/ | tar xf -
+pushd .tmp/bigcouch
+git init
+git add --all
+git commit -m "Tarball commit"
+git tag -m "CouchDB version" "$COUCHDB_VERSION"
+echo "This is the release tarball for $BIGCOUCH_VERSION" > BUILD
+git add BUILD
+git commit -am "Tarball commit"
+git tag -m "BigCouch version" "$BIGCOUCH_VERSION"
+popd
+
+tar czf $BIGCOUCH_VERSION.tar.gz -C .tmp bigcouch
+rm -rf .tmp
