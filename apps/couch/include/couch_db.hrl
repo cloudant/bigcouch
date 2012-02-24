@@ -175,8 +175,6 @@
     fsync_options = [],
     options = [],
     compression,
-    before_doc_update = nil, % nil | fun(Doc, Db) -> NewDoc
-    after_doc_read = nil,     % nil | fun(Doc, Db) -> NewDoc
     is_sys_db = false
     }).
 
