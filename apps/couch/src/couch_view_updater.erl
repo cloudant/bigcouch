@@ -73,7 +73,7 @@ update(Owner, Group, #db{name = DbName} = Db) ->
     _ -> [conflicts, deleted_conflicts]
     end,
     EnumFun = fun ?MODULE:load_docs/3,
-    Acc0 = {0, Db, MapQueue, DocOpts, IncludeDesign, TotalChanges},
+    Acc0 = {0, Db, MapQueue, DocOpts, IncludeDesign},
     {ok, _, _} = couch_db:enum_docs_since(Db, Seq, EnumFun, Acc0, []),
     couch_work_queue:close(MapQueue),
     receive {new_group, NewGroup} ->
@@ -81,10 +81,22 @@ update(Owner, Group, #db{name = DbName} = Db) ->
                 NewGroup#group{current_seq=couch_db:get_update_seq(Db)}})
     end.
 
-load_docs(DocInfo, _, {I, Db, MapQueue, DocOpts, IncludeDesign, Total} = Acc) ->
-    couch_task_status:update([{progress, I}, {changes_done, Total}]),
+load_docs(DocInfo, _, {I, Db, MapQueue, DocOpts, IncludeDesign} = Acc) ->
+    update_task(I),
     load_doc(Db, DocInfo, MapQueue, DocOpts, IncludeDesign),
     {ok, setelement(1, Acc, I+1)}.
+
+update_task(NumChanges) ->
+    [Changes, Total] = couch_task_status:get([changes_done, total_changes]),
+    Changes2 = Changes + NumChanges,
+    Progress = case Total of
+        0 ->
+            0;
+        _ ->
+            (Changes2 * 100) div Total
+    end,
+    couch_task_status:update([{progress, Progress}, {changes_done, Changes2}]).
+
 
 purge_index(#group{views=Views, id_btree=IdBtree}=Group, Db) ->
     {ok, PurgedIdsRevs} = couch_db:get_last_purged(Db),
