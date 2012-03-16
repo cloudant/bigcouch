@@ -1,3 +1,7 @@
+## Travis
+
+[![Build Status](https://secure.travis-ci.org/cloudant/bigcouch.png)](http://travis-ci.org/cloudant/bigcouch)
+
 ## Overview
 
 BigCouch is a highly available, fault-tolerant, clustered, mostly api-compliant
