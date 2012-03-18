@@ -15,7 +15,8 @@
 
 %% API
 -export([start_link/1, request_group/2, trigger_group_update/2, request_group_info/1]).
--export([open_db_group/2, open_temp_group/5, design_doc_to_view_group/1,design_root/2]).
+-export([open_db_group/2, open_temp_group/5, design_doc_to_view_group/1]).
+-export([design_root/2, index_file_name/3]).
 
 %% Exports for the compactor
 -export([get_index_header_data/1]).
@@ -222,7 +223,7 @@ handle_call({compact_done, NewGroup}, _From, State) ->
     {reply, update, State}.
 
 handle_cast({update_group, RequestSeq},
-        #group_state{
+    #group_state{
             db_name = DbName,
             group=#group{current_seq=Seq}=Group,
             updater_pid=nil}=State) when RequestSeq > Seq ->
@@ -240,12 +241,12 @@ handle_cast({partial_update, Pid, NewGroup}, #group_state{updater_pid=Pid}
     } = State,
     NewSeq = NewGroup#group.current_seq,
     ?LOG_DEBUG("checkpointing view update at seq ~p for ~s ~s", [NewSeq,
-        DbName, NewGroup#group.name]),
-    if not WaitingCommit ->
-        erlang:send_after(1000, self(), delayed_commit);
-    true -> ok
-    end,
-    {noreply, State#group_state{group=NewGroup, waiting_commit=true}};
+            DbName, NewGroup#group.name]),
+        if not WaitingCommit ->
+            erlang:send_after(1000, self(), delayed_commit);
+        true -> ok
+        end,
+        {noreply, State#group_state{group=NewGroup, waiting_commit=true}};
 handle_cast({partial_update, _, _}, State) ->
     %% message from an old (probably pre-compaction) updater; ignore
     {noreply, State}.
@@ -281,7 +282,7 @@ handle_info({'EXIT', FromPid, {new_group, Group}},
     end,
     case reply_with_group(Group, WaitList, [], RefCounter) of
     [] ->
-        {noreply, State#group_state{waiting_commit=true, waiting_list=[],
+            {noreply, State#group_state{waiting_commit=true, waiting_list=[],
                 group=Group, updater_pid=nil}};
     StillWaiting ->
         % we still have some waiters, reopen the database and reupdate the index
@@ -312,7 +313,7 @@ handle_info({'EXIT', UpPid, reset},
 handle_info({'EXIT', _, reset}, State) ->
     %% message from an old (probably pre-compaction) updater; ignore
     {noreply, State};
-    
+
 handle_info({'EXIT', _FromPid, normal}, State) ->
     {noreply, State};
 
@@ -382,8 +383,11 @@ prepare_group({RootDir, DbName, #group{sig=Sig}=Group}, ForceReset)->
                     {ok, Db, reset_file(Db, Fd, DbName, Group)}
                 end
             end;
-        Error ->
-            catch delete_index_file(RootDir, DbName, Sig),
+        {error, Reason} = Error ->
+            ?LOG_ERROR("Failed to open view file '~s': ~s", [
+                index_file_name(RootDir, DbName, Sig),
+                file:format_error(Reason)
+            ]),
             Error
         end;
     Else ->
@@ -408,6 +412,10 @@ hex_sig(GroupSig) ->
 design_root(RootDir, DbName) ->
     RootDir ++ "/." ++ ?b2l(DbName) ++ "_design/".
 
+index_file_name(RootDir, DBName, Pid) when is_pid(Pid) ->
+    {ok, GroupInfo} = request_group_info(Pid),
+    GroupSig = couch_util:from_hex(couch_util:get_value(signature, GroupInfo)),
+    index_file_name(RootDir, DBName, GroupSig);
 index_file_name(RootDir, DbName, GroupSig) ->
     design_root(RootDir, DbName) ++ hex_sig(GroupSig) ++".view".
 
@@ -583,9 +591,6 @@ reset_file(Db, Fd, DbName, #group{sig=Sig,name=Name} = Group) ->
     ok = couch_file:write_header(Fd, {Sig, nil}),
     init_group(Db, Fd, reset_group(Group), nil).
 
-delete_index_file(RootDir, DbName, GroupSig) ->
-    couch_file:delete(RootDir, index_file_name(RootDir, DbName, GroupSig)).
-
 init_group(Db, Fd, #group{views=Views}=Group, nil) ->
     init_group(Db, Fd, Group,
         #index_header{seq=0, purge_seq=couch_db:get_purge_seq(Db),
@@ -618,7 +623,7 @@ init_group(_Db, Fd, #group{def_lang=Lang,views=Views}=
                         UserReds),
                     {Count, Reduced, DataSize}
                 end,
-            
+
             case couch_util:get_value(<<"collation">>, Options, <<"default">>) of
             <<"default">> ->
                 Less = fun couch_view:less_json_ids/2;
