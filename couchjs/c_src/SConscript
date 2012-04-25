@@ -70,9 +70,10 @@ if not env.GetOption('clean'):
     if not conf.CheckLibWithHeader('mozjs185-1.0', jsapi, 'c', autoadd=1):
         if not conf.CheckLibWithHeader('mozjs', jsapi, 'c', autoadd=1):
             if not conf.CheckLibWithHeader('js', jsapi, 'c', autoadd=1):
-                print 'Could not find JS library.', \
-                    'Is Mozilla SpiderMonkey installed?'
-                Exit(1)
+                if not conf.CheckLibWithHeader('mozjs185', jsapi, 'c', autoadd=1):
+                    print 'Could not find JS library.', \
+                        'Is Mozilla SpiderMonkey installed?'
+                    Exit(1)
 
     ## Detect the version of SpiderMonkey we're using
     jsheader = "#include <%s>" % jsapi
