@@ -1,0 +1,22 @@
+#!/bin/bash
+
+if [ -z $NODE ]; then
+    if [ -z $1 ]; then
+        NODE=1
+    else
+        NODE=$1
+    fi
+fi
+
+if [ -z $HOST ]; then
+    HOST="127.0.0.1"
+fi
+
+VSN=`grep rel.*bigcouch rel/reltool.config | awk '{print $3}'`
+VSN=`echo $VSN | sed -e 's/^\"//g' -e 's/\",$//g'`
+
+NAME="remsh$$@$HOST"
+NODE="dev$NODE@$HOST"
+BOOT=./rel/dev1/releases/$VSN/start_clean
+COOKIE=monster
+erl -name $NAME -remsh $NODE -hidden -boot $BOOT

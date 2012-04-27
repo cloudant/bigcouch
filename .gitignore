@@ -8,6 +8,7 @@
 erl_crash.dump
 
 # building
+deps/
 apps/*/ebin/
 rel/dbcore
 rel/bigcouch.config
@@ -28,4 +29,5 @@ apps/couch/test/temp*
 
 # dev
 rel/dev*
+rel/logs*
 rel/tmpdata
