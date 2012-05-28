@@ -89,13 +89,19 @@ handle_call(_Call, _From, State) ->
 
 handle_cast({os_proc_idle, Pid}, #state{tab=Tab}=State) ->
     Limit = couch_config:get("query_server_config", "os_process_soft_limit", "100"),
-    case ets:info(Tab, size) > list_to_integer(Limit) of
-        true ->
-            ets:delete(Tab, Pid),
-            case is_process_alive(Pid) of
+    case ets:lookup(Tab, Pid) of
+        [#proc{client=nil}] ->
+            case ets:info(Tab, size) > list_to_integer(Limit) of
                 true ->
-                    unlink(Pid),
-                    gen_server:cast(Pid, stop);
+                    ?LOG_INFO("Closing idle OS Process: ~p", [Pid]),
+                    ets:delete(Tab, Pid),
+                    case is_process_alive(Pid) of
+                        true ->
+                            unlink(Pid),
+                            gen_server:cast(Pid, stop);
+                        _ ->
+                            ok
+                    end;
                 _ ->
                     ok
             end;
