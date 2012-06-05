@@ -15,9 +15,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--export([replicate/2, checkpoint/1]).
+-export([replicate/2, replicate/3, checkpoint/1]).
 -export([make_replication_id/2]).
--export([start_replication/3, end_replication/1, get_result/4]).
 
 -include("couch_db.hrl").
 -include("couch_js_functions.hrl").
@@ -56,6 +55,9 @@
     source_db_update_notifier = nil,
     target_db_update_notifier = nil
 }).
+
+replicate(A, B, _C) ->
+    replicate(A, B).
 
 %% convenience function to do a simple replication from the shell
 replicate(Source, Target) when is_list(Source) ->
