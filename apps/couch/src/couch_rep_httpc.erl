@@ -165,7 +165,7 @@ full_url(Req) ->
 
 process_response({ok, Status, Headers, Body}, Req) ->
     Code = list_to_integer(Status),
-    if Code =:= 200; Code =:= 201 ->
+    if Code =:= 200; Code =:= 201; Code =:= 202 ->
         ?JSON_DECODE(maybe_decompress(Headers, Body));
     Code =:= 301; Code =:= 302 ; Code =:= 303 ->
         do_request(redirected_request(Code, Headers, Req));
