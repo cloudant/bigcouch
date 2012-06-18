@@ -176,7 +176,7 @@ do_init([{BaseId, _Ext} = RepId, {PostProps}, UserCtx] = InitArgs) ->
     couch_task_status:add_task("Replication", io_lib:format("~s: ~s -> ~s",
         [ShortId, dbname(Source), dbname(Target)]), "Starting"),
 
-    couch_replication_manager:replication_started(RepId),
+    couch_replicator_manager:replication_started(RepId),
 
     State = #state{
         changes_feed = ChangesFeed,
@@ -273,12 +273,12 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 terminate(normal, #state{checkpoint_scheduled=nil, init_args=[RepId | _]} = State) ->
     do_terminate(State),
-    couch_replication_manager:replication_completed(RepId);
+    couch_replicator_manager:replication_completed(RepId);
 
 terminate(normal, #state{init_args=[RepId | _]} = State) ->
     timer:cancel(State#state.checkpoint_scheduled),
     do_terminate(do_checkpoint(State)),
-    couch_replication_manager:replication_completed(RepId);
+    couch_replicator_manager:replication_completed(RepId);
 
 terminate(shutdown, #state{listeners = Listeners} = State) ->
     % continuous replication stopped
@@ -288,7 +288,7 @@ terminate(shutdown, #state{listeners = Listeners} = State) ->
 terminate(Reason, #state{listeners = Listeners, init_args=[RepId | _]} = State) ->
     [gen_server:reply(L, {error, Reason}) || L <- Listeners],
     terminate_cleanup(State),
-    couch_replication_manager:replication_error(RepId, Reason).
+    couch_replicator_manager:replication_error(RepId, Reason).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
