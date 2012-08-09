@@ -541,7 +541,7 @@ mp_parse_atts({body, Bytes}, {DataList, Offset, Counters, Waiting}) ->
     NewAcc = maybe_send_data({DataList++[Bytes], Offset, Counters, Waiting}),
     fun(Next) -> mp_parse_atts(Next, NewAcc) end;
 mp_parse_atts(eof, {DataList, Offset, Counters, Waiting}) ->
-    N = list_to_integer(couch_config:get("cluster", "n", "3")),
+    N = n(),
     M = length(Counters),
     case (M == N) andalso DataList == [] of
     true ->
@@ -581,7 +581,7 @@ maybe_send_data({ChunkList, Offset, Counters, Waiting}) ->
             SmallestIndex = lists:min(element(2, lists:unzip(Counters)))
         end,
         Size = length(Counters),
-        N = list_to_integer(couch_config:get("cluster", "n", "3")),
+        N = n(),
         if Size == N andalso SmallestIndex == (Offset+1) ->
             NewChunkList = tl(ChunkList),
             NewOffset = Offset+1;
@@ -619,3 +619,11 @@ abort_multi_part_stream(Parser, MonRef) ->
     false ->
         erlang:demonitor(MonRef, [flush])
     end.
+
+% This exists to permit testing in small clusters (<3). A better fix
+% would use the database's own N value and would consider only the
+% nodes which hold at least one shard of the database.
+n() ->
+    N = list_to_integer(couch_config:get("cluster", "n", "3")),
+    NodeCount = length(nodes()) + 1,
+    erlang:min(N, NodeCount).
