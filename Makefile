@@ -30,7 +30,9 @@ clean:
 # compile is required here because of cross-dependencies between apps
 check: compile
 	@./rebar eunit
-	@ERL_FLAGS="-pa `pwd`/apps/couch/ebin" prove apps/couch/test/etap/*.t
+	@ERL_FLAGS="-pa `pwd`/apps/couch/ebin \
+		    -pa `pwd`/deps/twig/ebin" \
+		prove apps/couch/test/etap/*.t
 
 dist: compile
 	@rm -rf rel/bigcouch
