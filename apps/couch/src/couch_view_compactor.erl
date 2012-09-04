@@ -47,12 +47,10 @@ compact_group(Group, EmptyGroup, DbName) ->
 
     {ok, Count} = couch_db:get_doc_count(Db),
 
-    <<"_design", ShortName/binary>> = GroupId,
-    TaskName = <<DbName/binary, ShortName/binary>>,
     couch_task_status:add_task([
         {type, view_compaction},
         {database, DbName},
-        {design_document, ShortName},
+        {design_document, GroupId},
         {progress, 0}
     ]),
 
