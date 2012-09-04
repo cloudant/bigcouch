@@ -62,7 +62,9 @@ compact_group(Group, EmptyGroup, DbName) ->
             exit({view_duplicated_id, DocId});
         true -> ok end,
         if TotalCopied rem 10000 =:= 0 ->
-            couch_task_status:update([{changes_done, TotalCopied}, {progress, (TotalCopied * 100) div Count}]),
+            couch_task_status:update([{changes_done, TotalCopied},
+                                      {total_changes, Count},
+                                      {progress, (TotalCopied * 100) div Count}]),
             {ok, Bt2} = couch_btree:add(Bt, lists:reverse([KV|Acc])),
             {ok, {Bt2, [], TotalCopied+1, DocId}};
         true ->
@@ -110,7 +112,9 @@ compact_view(View, EmptyView) ->
     %% Key is {Key,DocId}
     Fun = fun(KV, {Bt, Acc, TotalCopied}) ->
         if TotalCopied rem 10000 =:= 0 ->
-            couch_task_status:update([{changes_done, TotalCopied}, {progress, (TotalCopied * 100) div Count}]),
+            couch_task_status:update([{changes_done, TotalCopied},
+                                      {total_changes, Count},
+                                      {progress, (TotalCopied * 100) div Count}]),
             {ok, Bt2} = couch_btree:add(Bt, lists:reverse([KV|Acc])),
             {ok, {Bt2, [], TotalCopied + 1}};
         true ->
