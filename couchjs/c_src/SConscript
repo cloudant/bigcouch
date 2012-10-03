@@ -1,4 +1,4 @@
-# Copyright 2010 Cloudant
+# Copyright 2010-2012 Cloudant
 # 
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not
 # use this file except in compliance with the License. You may obtain a copy of
@@ -11,8 +11,9 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations under
 # the License.
-import os
 import commands
+import os
+import platform
 
 def require_lib(name):
     if not conf.CheckLib(name):
@@ -24,6 +25,11 @@ def runcmd(cmd):
 
 env = Environment(CC="c++", CCFLAGS='-g -O2 -DXP_UNIX',
                         CPPPATH=os.getenv("CPPPATH"))
+
+if os.uname()[0] == 'Linux':
+    platlibpath = "/usr/lib/%s-linux-gnu" % platform.machine()
+    if os.path.exists(platlibpath):
+        env.Append(LINKFLAGS="-L%s" % platlibpath)
 
 if os.uname()[0] == 'SunOS':
    env['CC'] = '/usr/sfw/bin/gcc'
