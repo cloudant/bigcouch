@@ -49,7 +49,12 @@ compact_group(Group, EmptyGroup, DbName) ->
 
     <<"_design", ShortName/binary>> = GroupId,
     TaskName = <<DbName/binary, ShortName/binary>>,
-    couch_task_status:add_task(<<"View Group Compaction">>, TaskName, <<"">>),
+    couch_task_status:add_task([
+        {type, view_compaction},
+        {database, DbName},
+        {design_document, ShortName},
+        {progress, 0}
+    ]),
 
     Fun = fun({DocId, _ViewIdKeys} = KV, {Bt, Acc, TotalCopied, LastId}) ->
         if DocId =:= LastId -> % COUCHDB-999
@@ -59,8 +64,7 @@ compact_group(Group, EmptyGroup, DbName) ->
             exit({view_duplicated_id, DocId});
         true -> ok end,
         if TotalCopied rem 10000 =:= 0 ->
-            couch_task_status:update("Copied ~p of ~p Ids (~p%)",
-                [TotalCopied, Count, (TotalCopied*100) div Count]),
+            couch_task_status:update([{changes_done, TotalCopied}, {progress, (TotalCopied * 100) div Count}]),
             {ok, Bt2} = couch_btree:add(Bt, lists:reverse([KV|Acc])),
             {ok, {Bt2, [], TotalCopied+1, DocId}};
         true ->
@@ -108,8 +112,7 @@ compact_view(View, EmptyView) ->
     %% Key is {Key,DocId}
     Fun = fun(KV, {Bt, Acc, TotalCopied}) ->
         if TotalCopied rem 10000 =:= 0 ->
-            couch_task_status:update("View #~p: copied ~p of ~p KVs (~p%)",
-                [View#view.id_num, TotalCopied, Count, (TotalCopied*100) div Count]),
+            couch_task_status:update([{changes_done, TotalCopied}, {progress, (TotalCopied * 100) div Count}]),
             {ok, Bt2} = couch_btree:add(Bt, lists:reverse([KV|Acc])),
             {ok, {Bt2, [], TotalCopied + 1}};
         true ->
@@ -121,4 +124,3 @@ compact_view(View, EmptyView) ->
         {EmptyView#view.btree, [], 0}),
     {ok, NewBt} = couch_btree:add(Bt3, lists:reverse(Uncopied)),
     EmptyView#view{btree = NewBt}.
-

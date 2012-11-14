@@ -872,6 +872,7 @@ copy_docs(Db, #db{fd=DestFd}=NewDb, MixedInfos, Retry) ->
             NewDb#db.seq_tree, NewInfos, RemoveSeqs),
     {ok, IdTree} = couch_btree:add_remove(
             NewDb#db.id_tree, NewInfos, []),
+    update_compact_task(length(NewInfos)),
     NewDb#db{id_tree=IdTree, seq_tree=SeqTree}.
 
 
@@ -903,14 +904,30 @@ copy_compact(Db, NewDb0, Retry) ->
         end
     end,
 
-    couch_task_status:set_update_frequency(500),
+    TaskProps0 = [
+        {type, database_compaction},
+        {database, Db#db.name},
+        {progress, 0},
+        {changes_done, 0},
+        {total_changes, TotalChanges}
+    ],
+    case Retry and couch_task_status:is_task_added() of
+    true ->
+        couch_task_status:update([
+            {retry, true},
+            {progress, 0},
+            {changes_done, 0},
+            {total_changes, TotalChanges}
+        ]);
+    false ->
+        couch_task_status:add_task(TaskProps0),
+        couch_task_status:set_update_frequency(500)
+    end,
 
     {ok, _, {NewDb2, Uncopied, TotalChanges}} =
         couch_btree:foldl(Db#db.seq_tree, EnumBySeqFun,
             {NewDb, [], 0},
             [{start_key, NewDb#db.update_seq + 1}]),
-
-    couch_task_status:update("Flushing"),
 
     NewDb3 = copy_docs(Db, NewDb2, lists:reverse(Uncopied), Retry),
 
@@ -929,7 +946,6 @@ start_copy_compact(#db{name=Name,filepath=Filepath,header=#db_header{purge_seq=P
     ?LOG_DEBUG("Compaction process spawned for db \"~s\"", [Name]),
     case couch_file:open(CompactFile) of
     {ok, Fd} ->
-        couch_task_status:add_task(<<"Database Compaction">>, <<Name/binary, " retry">>, <<"Starting">>),
         Retry = true,
         case couch_file:read_header(Fd) of
         {ok, Header} ->
@@ -938,7 +954,6 @@ start_copy_compact(#db{name=Name,filepath=Filepath,header=#db_header{purge_seq=P
             ok = couch_file:write_header(Fd, Header=#db_header{})
         end;
     {error, enoent} ->
-        couch_task_status:add_task(<<"Database Compaction">>, Name, <<"Starting">>),
         {ok, Fd} = couch_file:open(CompactFile, [create]),
         Retry = false,
         ok = couch_file:write_header(Fd, Header=#db_header{})
@@ -957,3 +972,13 @@ start_copy_compact(#db{name=Name,filepath=Filepath,header=#db_header{purge_seq=P
     close_db(NewDb3),
     gen_server:cast(Db#db.main_pid, {compact_done, CompactFile}).
 
+update_compact_task(NumChanges) ->
+    [Changes, Total] = couch_task_status:get([changes_done, total_changes]),
+    Changes2 = Changes + NumChanges,
+    Progress = case Total of
+    0 ->
+        0;
+    _ ->
+        (Changes2 * 100) div Total
+    end,
+    couch_task_status:update([{changes_done, Changes2}, {progress, Progress}]).

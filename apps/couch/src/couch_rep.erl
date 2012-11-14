@@ -172,9 +172,18 @@ do_init([{BaseId, _Ext} = RepId, {PostProps}, UserCtx] = InitArgs) ->
     ets:insert(Stats, {docs_written, 0}),
     ets:insert(Stats, {doc_write_failures, 0}),
 
-    {ShortId, _} = lists:split(6, BaseId),
-    couch_task_status:add_task("Replication", io_lib:format("~s: ~s -> ~s",
-        [ShortId, dbname(Source), dbname(Target)]), "Starting"),
+    couch_task_status:add_task([
+        {user, UserCtx#user_ctx.name},
+        {type, replication},
+        {replication_id, ?l2b(RepId)},
+        {source, dbname(Source)},
+        {target, dbname(Target)},
+        {continuous, Continuous},
+        {docs_read, 0},
+        {docs_written, 0},
+        {doc_write_failures, 0}
+    ]),
+    couch_task_status:set_update_frequency(1000),
 
     State = #state{
         changes_feed = ChangesFeed,
@@ -230,15 +239,16 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({missing_revs_checkpoint, SourceSeq}, State) ->
-    couch_task_status:update("MR Processed source update #~p", [SourceSeq]),
-    {noreply, schedule_checkpoint(State#state{committed_seq = SourceSeq})};
-
+    NewState = schedule_checkpoint(State#state{committed_seq = SourceSeq}),
+    update_task(NewState),
+    {noreply, NewState};
 handle_info({writer_checkpoint, SourceSeq}, #state{committed_seq=N} = State)
         when SourceSeq > N ->
     MissingRevs = State#state.missing_revs,
     ok = gen_server:cast(MissingRevs, {update_committed_seq, SourceSeq}),
-    couch_task_status:update("W Processed source update #~p", [SourceSeq]),
-    {noreply, schedule_checkpoint(State#state{committed_seq = SourceSeq})};
+    NewState = schedule_checkpoint(State#state{committed_seq = SourceSeq}),
+    update_task(NewState),
+    {noreply, NewState};
 handle_info({writer_checkpoint, _}, State) ->
     {noreply, State};
 
@@ -430,7 +440,6 @@ do_terminate(State) ->
         false ->
             [gen_server:reply(R, retry) || R <- OtherListeners]
     end,
-    couch_task_status:update("Finishing"),
     terminate_cleanup(State).
 
 terminate_cleanup(State) ->
@@ -916,3 +925,8 @@ target_db_update_notifier(#db{name = DbName}) ->
     Notifier;
 target_db_update_notifier(_) ->
     nil.
+
+update_task(#state{stats=Stats}) ->
+    Update = [ {Stat, ets:lookup_element(Stats, Stat, 2)} || Stat <-
+        [total_revs, missing_revs, docs_read, docs_written, doc_write_failures]],
+    couch_task_status:update(Update).
