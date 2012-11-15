@@ -1,8 +1,28 @@
+# Copyright 2012 Cloudant
+
+# for dynamic builds comment out couchjsflags
+env:
+   - couchjsflags="--static --nocurl"
+
 before_install:
-   - sudo apt-get update
-   - sudo apt-get install libicu-dev libmozjs-dev
+   - echo "deb http://packages.cloudant.com/ubuntu precise main" | sudo tee /etc/apt/sources.list.d/cloudant-source.list
+   - sudo apt-get update -qq
+   - sudo apt-get purge -qq libmozjs185-dev libmozjs185-1.0
+# for static builds with no threading:
+   - sudo apt-get install -qq --force-yes libmozjs185-cloudant libmozjs185-cloudant-dev libicu-dev
+# for dynamic builds with threading:
+#   - sudo apt-get install -qq libmozjs185-1.0 libmozjs185-dev libnspr4 libnspr4-dev libicu-dev
+
 before_script: ./configure
+
 script: make check
+
 language: erlang
+
+notifications:
+  email: false
+  irc: "irc.freenode.org#cloudant"
+
 otp_release:
    - R14B04
+   - R15B02
