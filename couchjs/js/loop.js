@@ -19,7 +19,7 @@ function init_sandbox() {
     sandbox.emit = Views.emit;
     sandbox.sum = Views.sum;
     sandbox.log = log;
-    sandbox.toJSON = Couch.toJSON;
+    sandbox.toJSON = JSON.stringify;
     sandbox.JSON = JSON;
     sandbox.provides = Mime.provides;
     sandbox.registerType = Mime.registerType;
@@ -27,6 +27,7 @@ function init_sandbox() {
     sandbox.send = Render.send;
     sandbox.getRow = Render.getRow;
     sandbox.isArray = isArray;
+    sandbox.index = Dreyfus.index;
   } catch (e) {
     log(e.toSource());
   }
@@ -100,11 +101,13 @@ var Loop = function() {
     "ddoc"     : DDoc.ddoc,
     // "view"    : Views.handler,
     "reset"    : State.reset,
+    "add_att"  : State.addAtt,
     "add_fun"  : State.addFun,
     "add_lib"  : State.addLib,
     "map_doc"  : Views.mapDoc,
     "reduce"   : Views.reduce,
-    "rereduce" : Views.rereduce
+    "rereduce" : Views.rereduce,
+    "index_doc": Dreyfus.indexDoc
   };
   function handleError(e) {
     var type = e[0];
@@ -122,7 +125,7 @@ var Loop = function() {
     }
   };
   while (line = readline()) {
-    cmd = eval('('+line+')');
+	cmd = JSON.parse(line);
     State.line_length = line.length;
     try {
       cmdkey = cmd.shift();

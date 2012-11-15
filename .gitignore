@@ -29,3 +29,4 @@ apps/couch/test/temp*
 # dev
 rel/dev*
 rel/tmpdata
+/.project

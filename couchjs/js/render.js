@@ -174,7 +174,7 @@ var Render = (function() {
       blowChunks();
     }
     var line = readline();
-    var json = eval('('+line+')');
+    var json = JSON.parse(line);
     if (json[0] == "list_end") {
       lastRow = true;
       return null;

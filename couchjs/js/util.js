@@ -70,25 +70,25 @@ var Couch = {
             ddoc._module_cache = {};
           }
           var require = function(name, module) {
-            module = module || {};
-            var newModule = resolveModule(name.split('/'), module.parent, ddoc);
-            if (!ddoc._module_cache.hasOwnProperty(newModule.id)) {
-              // create empty exports object before executing the module,
-              // stops circular requires from filling the stack
-              ddoc._module_cache[newModule.id] = {};
-              var s = "function (module, exports, require) { " + newModule.current + " }";
-              try {
-                var func = sandbox ? evalcx(s, sandbox) : eval(s);
-                func.apply(sandbox, [newModule, newModule.exports, function(name) {
-                  return require(name, newModule);
-                }]);
-              } catch(e) { 
-                throw ["error","compilation_error","Module require('"+name+"') raised error "+e.toSource()]; 
+              module = module || {};
+              var newModule = resolveModule(name.split('/'), module.parent, ddoc);
+              if (!ddoc._module_cache.hasOwnProperty(newModule.id)) {
+                // create empty exports object before executing the module,
+                // stops circular requires from filling the stack
+                ddoc._module_cache[newModule.id] = {};
+                var s = "function (module, exports, require) { " + newModule.current + " }";
+                try {
+                  var func = sandbox ? evalcx(s, sandbox) : eval(s);
+                  func.apply(sandbox, [newModule, newModule.exports, function(name) {
+                    return require(name, newModule);
+                  }]);
+                } catch(e) { 
+                  throw ["error","compilation_error","Module require('"+name+"') raised error "+e.toSource()]; 
+                }
+                ddoc._module_cache[newModule.id] = newModule.exports;
               }
-              ddoc._module_cache[newModule.id] = newModule.exports;
+              return ddoc._module_cache[newModule.id];
             }
-            return ddoc._module_cache[newModule.id];
-          }
           sandbox.require = require;
         }
         var functionObject = evalcx(source, sandbox);
@@ -121,10 +121,10 @@ var Couch = {
   }
 }
 
-// prints the object as JSON, and rescues and logs any toJSON() related errors
+// prints the object as JSON, and rescues and logs any JSON.stringify() related errors
 function respond(obj) {
   try {
-    print(Couch.toJSON(obj));
+    print(JSON.stringify(obj));
   } catch(e) {
     log("Error converting object to JSON: " + e.toString());
     log("error on obj: "+ obj.toSource());
@@ -136,7 +136,7 @@ function log(message) {
   if (typeof message == "xml") {
     message = message.toXMLString();
   } else if (typeof message != "string") {
-    message = Couch.toJSON(message);
+    message = JSON.stringify(message);
   }
   respond(["log", String(message)]);
 };

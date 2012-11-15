@@ -22,7 +22,11 @@ var State = {
   },
   addFun : function(newFun) {
     // Compile to a function and add it to funs array
-    State.funs.push(Couch.compileFunction(newFun, {views : {lib : State.lib}}));
+	State.funs.push(Couch.compileFunction(newFun, {views : {lib : State.lib}}));
+    print("true");
+  },
+  addAtt: function(name, len, md5) {
+    // Decline attachments.
     print("true");
   },
   addLib : function(lib) {

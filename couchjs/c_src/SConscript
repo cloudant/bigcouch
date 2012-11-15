@@ -11,8 +11,8 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations under
 # the License.
-import commands
 import os
+import commands
 import platform
 
 def require_lib(name):
@@ -23,13 +23,19 @@ def require_lib(name):
 def runcmd(cmd):
     return commands.getstatusoutput(cmd)
 
+# support --static for static builds
+AddOption('--static', dest='static', action="store_true", default=False)
+# support --nocurl to build without curl
+AddOption('--nocurl', dest='usecurl', action="store_false", default=True)
+
 env = Environment(CC="c++", CCFLAGS='-g -O2 -DXP_UNIX',
                         CPPPATH=os.getenv("CPPPATH"))
 
-if os.uname()[0] == 'Linux':
-    platlibpath = "/usr/lib/%s-linux-gnu" % platform.machine()
-    if os.path.exists(platlibpath):
-        env.Append(LINKFLAGS="-L%s" % platlibpath)
+# possibly attempt a static build of couchjs
+# warning! requires a libmozjs with --disable-threads!
+if GetOption('static'):
+    env.Append(LINKFLAGS=['-static', '-static-libgcc',
+                        '-static-libstdc++'])
 
 if os.uname()[0] == 'SunOS':
    env['CC'] = '/usr/sfw/bin/gcc'
@@ -43,7 +49,7 @@ if os.uname()[0] == 'FreeBSD':
 	env['LIB_COMPAT'] = 'compat'
 
 if os.path.exists('/usr/bin/pkg-config'):
-    for pkg in ["mozilla-js-185", "mozilla-js"]:
+    for pkg in ["mozilla-js-185", "mozilla-js", "mozjs185"]:
         (s1, output) = runcmd("/usr/bin/pkg-config %s --cflags" % pkg)
         if s1 == 0:
             env.Append(CCFLAGS=" " + output)
@@ -55,10 +61,6 @@ if os.path.exists('/usr/bin/pkg-config'):
 
 if not env.GetOption('clean'):
     conf = Configure(env, config_h='config.h')
-
-    require_lib('m')
-    require_lib('pthread')
-    require_lib('nspr4')
 
     ## check for SpiderMonkey development header
     if conf.CheckHeader('mozjs/jsapi.h'):
@@ -74,9 +76,9 @@ if not env.GetOption('clean'):
 
     ## check for SpiderMonkey library as libjs or libmozjs
     if not conf.CheckLibWithHeader('mozjs185-1.0', jsapi, 'c', autoadd=1):
-        if not conf.CheckLibWithHeader('mozjs', jsapi, 'c', autoadd=1):
-            if not conf.CheckLibWithHeader('js', jsapi, 'c', autoadd=1):
-                if not conf.CheckLibWithHeader('mozjs185', jsapi, 'c', autoadd=1):
+        if not conf.CheckLibWithHeader('mozjs185', jsapi, 'c', autoadd=1):
+            if not conf.CheckLibWithHeader('mozjs', jsapi, 'c', autoadd=1):
+                if not conf.CheckLibWithHeader('js', jsapi, 'c', autoadd=1):
                     print 'Could not find JS library.', \
                         'Is Mozilla SpiderMonkey installed?'
                     Exit(1)
@@ -101,14 +103,21 @@ if not env.GetOption('clean'):
         conf.Define("JSSCRIPT_TYPE", "JSObject*")
 
     ## Check if curl is available
-    try:
-        vsn = runcmd("curl-config --version")[1]
-        vsn = vsn.split()[-1].strip().split(".")
-        vsn = tuple(map(int, vsn))
-        if vsn > (7, 18, 0):
-            require_lib('curl')
-    except:
-        pass
+    if GetOption('usecurl'):
+	    try:
+	        vsn = runcmd("curl-config --version")[1]
+	        vsn = vsn.split()[-1].strip().split(".")
+	        vsn = tuple(map(int, vsn))
+	        if vsn > (7, 18, 0):
+	            require_lib('curl')
+	    except:
+	        pass
+
+    ## Must be specified after js/curl in this order for a static build
+    if not GetOption('static'):
+        require_lib('nspr4')
+    require_lib('pthread')
+    require_lib('m')
 
     ## Define properties for -h / -V
 
