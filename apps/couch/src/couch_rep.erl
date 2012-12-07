@@ -175,7 +175,7 @@ do_init([{BaseId, _Ext} = RepId, {PostProps}, UserCtx] = InitArgs) ->
     couch_task_status:add_task([
         {user, UserCtx#user_ctx.name},
         {type, replication},
-        {replication_id, ?l2b(RepId)},
+        {replication_id, ?l2b(BaseId)},
         {source, dbname(Source)},
         {target, dbname(Target)},
         {continuous, Continuous},
