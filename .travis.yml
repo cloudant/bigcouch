@@ -24,5 +24,5 @@ notifications:
   irc: "irc.freenode.org#cloudant"
 
 otp_release:
-   - R14B01
-   - R15B01
+   - R14B04
+   - R15B02
