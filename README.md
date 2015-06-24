@@ -1,6 +1,4 @@
-# IMPORTANT NOTE: BigCouch is no longer supported by Cloudant
-
-## Travis
+## IMPORTANT NOTE: BigCouch is no longer supported by Cloudant
 
 ## Overview
 

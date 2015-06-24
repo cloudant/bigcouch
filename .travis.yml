@@ -21,7 +21,6 @@ language: erlang
 
 notifications:
   email: false
-  irc: "irc.freenode.org#cloudant"
 
 otp_release:
    - R14B04
