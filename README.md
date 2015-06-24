@@ -1,6 +1,6 @@
-## Travis
+# IMPORTANT NOTE: BigCouch is no longer supported by Cloudant
 
-[![Build Status](https://secure.travis-ci.org/cloudant/bigcouch.png)](http://travis-ci.org/cloudant/bigcouch)
+## Travis
 
 ## Overview
 
