@@ -32,11 +32,6 @@ subscribe to [the mailing list](http://groups.google.com/group/bigcouch-user).
 
 Please see http://bigcouch.cloudant.com/troubleshoot
 
-## Contact
-
-Cloudant folks are usually hanging out in IRC. Freenode, channel #cloudant.
-There's also a [Google Group](http://groups.google.com/group/bigcouch-user).
-
 [1]: http://couchdb.apache.org
 [2]: http://cloudant.com
 [4]: http://www.allthingsdistributed.com/2007/10/amazons_dynamo.html
